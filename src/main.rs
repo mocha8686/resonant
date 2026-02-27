@@ -3,17 +3,17 @@ use iced::{
     widget::{button, column, container, row, stack},
 };
 use resonant::{
-    soundscape::Soundscape,
+    soundscape::{self, Soundscape},
     track::{self, Track},
 };
 use rfd::FileDialog;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 enum MainMessage {
     Track(track::Message, usize),
+    Soundscape(soundscape::Message),
     AddTrack,
     RemoveTrack,
-    None,
 }
 
 struct State {
@@ -39,6 +39,9 @@ impl State {
                 };
                 track.update(msg);
             }
+            MainMessage::Soundscape(msg) => {
+                self.soundscape.update(msg);
+            }
             MainMessage::AddTrack => {
                 let Some(path) = FileDialog::new()
                     .add_filter("audio", &["mp3", "ogg", "wav", "m4a"])
@@ -52,7 +55,6 @@ impl State {
             MainMessage::RemoveTrack => {
                 self.tracks.pop();
             }
-            MainMessage::None => {}
         }
     }
 
@@ -70,7 +72,7 @@ impl State {
             button("-").on_press(MainMessage::RemoveTrack),
         ])
         .style(container::primary);
-        let canvas = self.soundscape.view().map(|_| MainMessage::None);
+        let canvas = self.soundscape.view().map(MainMessage::Soundscape);
 
         stack![canvas, track_menu].into()
     }
