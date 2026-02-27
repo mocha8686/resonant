@@ -4,4 +4,5 @@
     reason = "prototyping"
 )]
 
+pub mod soundscape;
 pub mod track;
