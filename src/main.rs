@@ -1,7 +1,7 @@
 use iced::{
     Element,
     Length::Fill,
-    widget::{button, column, container, pin, row, stack, text},
+    widget::{button, column, container, row, stack, text},
 };
 use resonant::{
     soundscape::{self, Soundscape},

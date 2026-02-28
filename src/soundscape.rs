@@ -39,7 +39,7 @@ impl Soundscape {
     const MIN_SCALE: f32 = 0.1;
     const MAX_SCALE: f32 = 1.5;
 
-    const SCROLL_SENSITIVITY: f32 = 1.0 / 60.0;
+    const SCROLL_SENSITIVITY: f32 = 1.0 / 100.0;
 
     #[must_use]
     pub fn new(radius: f32) -> Self {
@@ -58,13 +58,44 @@ impl Soundscape {
                 if let Some(position) = position {
                     self.position = position;
                 }
-            },
+            }
         }
     }
 
     #[must_use]
     pub fn view(&self) -> Element<'_, Message> {
         iced::widget::canvas(self).width(Fill).height(Fill).into()
+    }
+
+    fn calculate_zoom(&self, offset_to_center: Option<Point>, scroll_y: f32) -> Action<Message> {
+        if scroll_y < 0.0 && self.scale > Self::MIN_SCALE
+            || scroll_y > 0.0 && self.scale < Self::MAX_SCALE
+        {
+            let new_scale = (self.scale * 1.0 + scroll_y * Self::SCROLL_SENSITIVITY)
+                .clamp(Self::MIN_SCALE, Self::MAX_SCALE);
+            let translation = if let Some(offset) = offset_to_center {
+                let factor = (new_scale / self.scale - 1.0) / new_scale;
+                let offset = Vector::new(offset.x, offset.y);
+                Some(self.position - offset * factor)
+            } else {
+                None
+            };
+
+            canvas::Action::publish(Message::Scaled(new_scale, translation)).and_capture()
+        } else {
+            canvas::Action::capture()
+        }
+    }
+
+    fn calculate_pan(
+        &self,
+        cursor_end: Point,
+        cursor_start: Point,
+        original_position: Vector,
+    ) -> Action<Message> {
+        let delta = cursor_end - cursor_start;
+        let msg = Message::Translated(original_position + delta / self.scale);
+        canvas::Action::publish(msg).and_capture()
     }
 }
 
@@ -120,10 +151,9 @@ impl Program<Message> for Soundscape {
                         cursor_start,
                         original_position,
                     } => {
-                        let delta = *position - *cursor_start;
-                        Some(Message::Translated(*original_position + delta / self.scale))
-                            .map(canvas::Action::publish)
-                            .map(canvas::Action::and_capture)
+                        let action =
+                            self.calculate_pan(*position, *cursor_start, *original_position);
+                        Some(action)
                     }
                     State::None => None,
                 },
@@ -143,22 +173,8 @@ impl Program<Message> for Soundscape {
                 }
                 mouse::Event::WheelScrolled { delta } => match *delta {
                     mouse::ScrollDelta::Lines { y, .. } | mouse::ScrollDelta::Pixels { y, .. } => {
-                        if y < 0.0 && self.scale > Self::MIN_SCALE
-                            || y > 0.0 && self.scale < Self::MAX_SCALE
-                        {
-                            let new_scale = (self.scale * 1.0 + y * Self::SCROLL_SENSITIVITY).clamp(Self::MIN_SCALE, Self::MAX_SCALE);
-                            let translation = if let Some(offset) = cursor.position_from(bounds.center()) {
-                                let factor = (new_scale / self.scale - 1.0) / new_scale;
-                                let offset = Vector::new(offset.x, offset.y);
-                                Some(self.position - offset * factor)
-                            } else {
-                                None
-                            };
-
-                            Some(canvas::Action::publish(Message::Scaled(new_scale, translation)).and_capture())
-                        } else {
-                            Some(canvas::Action::capture())
-                        }
+                        let action = self.calculate_zoom(cursor.position_from(bounds.center()), y);
+                        Some(action)
                     }
                 },
                 _ => None,
