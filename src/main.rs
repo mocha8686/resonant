@@ -1,7 +1,6 @@
 use iced::{
     Element,
-    Length::Fill,
-    widget::{button, column, container, row, stack, text},
+    widget::{button, column, container, row, stack},
 };
 use resonant::{
     soundscape::{self, Soundscape},
@@ -74,15 +73,8 @@ impl State {
         ])
         .style(container::primary);
         let canvas = self.soundscape.view().map(MainMessage::Soundscape);
-        let debug = container(column![
-            text!("pos: {:?}", self.soundscape.position),
-            text!("scale: {}", self.soundscape.scale),
-        ])
-        .width(Fill)
-        .height(Fill)
-        .align_right(0);
 
-        stack![canvas, track_menu, debug].into()
+        stack![canvas, track_menu].into()
     }
 }
 
