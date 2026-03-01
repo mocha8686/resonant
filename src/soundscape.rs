@@ -1,3 +1,5 @@
+use std::cmp::max_by_key;
+
 use iced::{
     Element, Event,
     Length::Fill,
@@ -28,18 +30,22 @@ pub enum State {
 #[derive(Debug, Clone, Copy)]
 pub struct Soundscape {
     radius: f32,
-    pub position: Vector,
-    pub scale: f32,
+    position: Vector,
+    scale: f32,
 }
 
 impl Soundscape {
     const STROKE_WIDTH: f32 = 1.0;
     const STROKE_ALPHA: f32 = 0.3;
 
-    const MIN_SCALE: f32 = 0.1;
-    const MAX_SCALE: f32 = 1.5;
+    const MIN_SCALE: f32 = 0.25;
+    const MAX_SCALE: f32 = 2.0;
 
     const SCROLL_SENSITIVITY: f32 = 1.0 / 100.0;
+
+    const MIN_SPACING: f32 = 75.0;
+    const DEFAULT_SPACING: f32 = 100.0;
+    const MAX_SPACING: f32 = 125.0;
 
     #[must_use]
     pub fn new(radius: f32) -> Self {
@@ -64,7 +70,8 @@ impl Soundscape {
 
     #[must_use]
     pub fn view(&self) -> Element<'_, Message> {
-        iced::widget::canvas(self).width(Fill).height(Fill).into()
+        let canvas = iced::widget::canvas(self).width(Fill).height(Fill);
+        canvas.into()
     }
 
     fn calculate_zoom(&self, offset_to_center: Option<Point>, scroll_y: f32) -> Action<Message> {
@@ -97,6 +104,68 @@ impl Soundscape {
         let msg = Message::Translated(original_position + delta / self.scale);
         canvas::Action::publish(msg).and_capture()
     }
+
+    #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+    fn draw_grid(&self, frame: &mut Frame, theme: &Theme, bounds: Rectangle) {
+        let spacing = Self::DEFAULT_SPACING * self.scale;
+
+        let n_min = (Self::MIN_SPACING / spacing).log2().ceil() as i32;
+        let n_max = (Self::MAX_SPACING / spacing).log2().floor() as i32;
+        let n = max_by_key(n_min, n_max, |n: &i32| n.abs());
+
+        let spacing = spacing * (n as f32).exp2();
+
+        let stroke = Stroke::default()
+            .with_width(Self::STROKE_WIDTH)
+            .with_color(theme.palette().text.scale_alpha(Self::STROKE_ALPHA));
+
+        self.draw_gridlines(frame, spacing, bounds, Direction::Vertical, stroke);
+        self.draw_gridlines(frame, spacing, bounds, Direction::Horizontal, stroke);
+    }
+
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::cast_precision_loss
+    )]
+    fn draw_gridlines(
+        &self,
+        frame: &mut Frame,
+        spacing: f32,
+        bounds: Rectangle,
+        direction: Direction,
+        stroke: Stroke,
+    ) {
+        let main_length = match direction {
+            Direction::Vertical => bounds.width,
+            Direction::Horizontal => bounds.height,
+        };
+        let cross_length = match direction {
+            Direction::Vertical => bounds.height,
+            Direction::Horizontal => bounds.width,
+        };
+
+        let amount = (main_length / spacing).ceil() as u32;
+        let position = match direction {
+            Direction::Vertical => self.position.x,
+            Direction::Horizontal => self.position.y,
+        };
+        let offset = (main_length / 2.0 + position * self.scale) % spacing;
+        for i in 0..amount {
+            let c = i as f32 * spacing + offset;
+            let path = match direction {
+                Direction::Vertical => Path::line((c, 0.0).into(), (c, cross_length).into()),
+                Direction::Horizontal => Path::line((0.0, c).into(), (cross_length, c).into()),
+            };
+            frame.stroke(&path, stroke);
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum Direction {
+    Vertical,
+    Horizontal,
 }
 
 impl Program<Message> for Soundscape {
@@ -111,29 +180,17 @@ impl Program<Message> for Soundscape {
         _cursor: Cursor,
     ) -> Vec<Geometry<Renderer>> {
         let mut frame = Frame::new(renderer, bounds.size());
-
         let center_origin_transform = Vector::new(bounds.width, bounds.height) / 2.0;
         frame.translate(center_origin_transform);
         frame.scale(self.scale);
         frame.translate(self.position);
-
         let path = Path::circle((0.0, 0.0).into(), self.radius);
-
-        let w2 = frame.width() / 2.0;
-        let h2 = frame.height() / 2.0;
-
-        let ns = Path::line((0.0, -h2).into(), (0.0, h2).into());
-        let ew = Path::line((-w2, 0.0).into(), (w2, 0.0).into());
-
-        let stroke = Stroke::default()
-            .with_width(Self::STROKE_WIDTH)
-            .with_color(theme.palette().text.scale_alpha(Self::STROKE_ALPHA));
-
-        frame.stroke(&ns, stroke);
-        frame.stroke(&ew, stroke);
         frame.fill(&path, theme.palette().primary);
 
-        vec![frame.into_geometry()]
+        let mut grid_frame = Frame::new(renderer, bounds.size());
+        self.draw_grid(&mut grid_frame, theme, bounds);
+
+        vec![grid_frame.into_geometry(), frame.into_geometry()]
     }
 
     #[allow(clippy::collapsible_match, reason = "prototyping")]
