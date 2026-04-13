@@ -1,6 +1,5 @@
 use iced::{
-    Element,
-    widget::{button, column, container, row, stack},
+    Element, Subscription, widget::{button, column, container, row, stack}
 };
 use resonant::{
     soundscape::{self, Soundscape},
@@ -25,7 +24,7 @@ impl Default for State {
     fn default() -> Self {
         Self {
             tracks: Vec::new(),
-            soundscape: Soundscape::new(50.0),
+            soundscape: Soundscape::new(),
         }
     }
 }
@@ -76,8 +75,14 @@ impl State {
 
         stack![canvas, track_menu].into()
     }
+
+    fn subscription(&self) -> Subscription<MainMessage> {
+        self.soundscape.subscription().map(MainMessage::Soundscape)
+    }
 }
 
 fn main() -> iced::Result {
-    iced::run(State::update, State::view)
+    iced::application(State::default, State::update, State::view)
+        .subscription(State::subscription)
+        .run()
 }

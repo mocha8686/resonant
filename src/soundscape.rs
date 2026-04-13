@@ -1,20 +1,30 @@
-use std::cmp::max_by_key;
+use std::{cmp::max_by_key, collections::VecDeque, time::Instant};
 
 use iced::{
     Element, Event,
     Length::Fill,
-    Point, Rectangle, Renderer, Theme, Vector,
+    Rectangle, Renderer, Subscription, Theme, Vector, keyboard,
     mouse::{self, Cursor},
     widget::{
         Action,
         canvas::{self, Frame, Geometry, Path, Program, Stroke},
     },
+    window,
 };
+
+use crate::Vector2;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Message {
-    Translated(Vector),
-    Scaled(f32, Option<Vector>),
+    Translated {
+        new_position: Vector2,
+    },
+    Scaled {
+        new_scale: f32,
+        new_position: Option<Vector2>,
+    },
+    NewFrame(Instant),
+    NewWaypoint(Vector2),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -22,21 +32,28 @@ pub enum State {
     #[default]
     None,
     Panning {
-        cursor_start: Point,
-        original_position: Vector,
+        cursor_start: Vector2,
+        original_position: Vector2,
     },
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Soundscape {
-    radius: f32,
-    position: Vector,
+    listener: Listener,
+    camera: Vector2,
     scale: f32,
+    current: Instant,
+    waypoints: VecDeque<Vector2>,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct Listener {
+    position: Vector2,
 }
 
 impl Soundscape {
-    const STROKE_WIDTH: f32 = 1.0;
-    const STROKE_ALPHA: f32 = 0.3;
+    const GRID_STROKE_WIDTH: f32 = 1.0;
+    const GRID_STROKE_ALPHA: f32 = 0.3;
 
     const MIN_SCALE: f32 = 0.25;
     const MAX_SCALE: f32 = 2.0;
@@ -47,23 +64,59 @@ impl Soundscape {
     const DEFAULT_SPACING: f32 = 100.0;
     const MAX_SPACING: f32 = 125.0;
 
+    const LISTENER_RADIUS: f32 = 25.0;
+    const WAYPOINT_RADIUS: f32 = 5.0;
+    const OVERLAP_THRESHOLD: f32 = 30.0;
+
+    const SPEED: f32 = 100.0;
+
     #[must_use]
-    pub fn new(radius: f32) -> Self {
+    pub fn new() -> Self {
         Self {
-            radius,
-            position: Vector::ZERO,
+            listener: Listener::default(),
+            camera: Vector2::ZERO,
             scale: 1.0,
+            current: Instant::now(),
+            waypoints: VecDeque::new(),
         }
     }
 
     pub fn update(&mut self, msg: Message) {
         match msg {
-            Message::Translated(vector) => self.position = vector,
-            Message::Scaled(scale, position) => {
-                self.scale = scale;
-                if let Some(position) = position {
-                    self.position = position;
+            Message::Translated { new_position } => self.camera = new_position,
+            Message::Scaled {
+                new_scale,
+                new_position,
+            } => {
+                self.scale = new_scale;
+                if let Some(new_position) = new_position {
+                    self.camera = new_position;
                 }
+            }
+            Message::NewFrame(instant) => {
+                let dt = instant - self.current;
+                self.current = instant;
+
+                let Some(next_waypoint) = self.waypoints.front() else {
+                    return;
+                };
+
+                let velocity = (*next_waypoint - self.listener.position).normalized() * Self::SPEED;
+                let dv = velocity * dt.as_secs_f32();
+                self.listener.position += dv;
+
+                while let Some(next_waypoint) = self.waypoints.front()
+                    && (*next_waypoint - self.listener.position).square_magnitude()
+                        < dv.square_magnitude()
+                {
+                    self.waypoints.pop_front();
+                }
+            }
+            Message::NewWaypoint(point) => {
+                if let Some(waypoint) = self.waypoints.back() && (point - *waypoint).square_magnitude() < Self::OVERLAP_THRESHOLD * Self::OVERLAP_THRESHOLD {
+                    self.waypoints.pop_back();
+                }
+                self.waypoints.push_back(point);
             }
         }
     }
@@ -71,24 +124,39 @@ impl Soundscape {
     #[must_use]
     pub fn view(&self) -> Element<'_, Message> {
         let canvas = iced::widget::canvas(self).width(Fill).height(Fill);
+        // let debug = container(text!(
+        //     "vel: ({}, {})",
+        //     self.listener.velocity.x,
+        //     self.listener.velocity.y
+        // ))
+        // .align_bottom(Fill);
+
         canvas.into()
+        // stack![debug, canvas].width(Fill).height(Fill).into()
     }
 
-    fn calculate_zoom(&self, offset_to_center: Option<Point>, scroll_y: f32) -> Action<Message> {
+    pub fn subscription(&self) -> Subscription<Message> {
+        window::frames().map(Message::NewFrame)
+    }
+
+    fn calculate_zoom(&self, offset_to_center: Option<Vector2>, scroll_y: f32) -> Action<Message> {
         if scroll_y < 0.0 && self.scale > Self::MIN_SCALE
             || scroll_y > 0.0 && self.scale < Self::MAX_SCALE
         {
             let new_scale = (self.scale * 1.0 + scroll_y * Self::SCROLL_SENSITIVITY)
                 .clamp(Self::MIN_SCALE, Self::MAX_SCALE);
-            let translation = if let Some(offset) = offset_to_center {
+            let new_position = if let Some(offset) = offset_to_center {
                 let factor = (new_scale / self.scale - 1.0) / new_scale;
-                let offset = Vector::new(offset.x, offset.y);
-                Some(self.position - offset * factor)
+                Some(self.camera - offset * factor)
             } else {
                 None
             };
 
-            canvas::Action::publish(Message::Scaled(new_scale, translation)).and_capture()
+            canvas::Action::publish(Message::Scaled {
+                new_scale,
+                new_position,
+            })
+            .and_capture()
         } else {
             canvas::Action::capture()
         }
@@ -96,12 +164,11 @@ impl Soundscape {
 
     fn calculate_pan(
         &self,
-        cursor_end: Point,
-        cursor_start: Point,
-        original_position: Vector,
+        delta: Vector2,
+        original_position: Vector2,
     ) -> Action<Message> {
-        let delta = cursor_end - cursor_start;
-        let msg = Message::Translated(original_position + delta / self.scale);
+        let new_position = original_position + delta / self.scale;
+        let msg = Message::Translated { new_position };
         canvas::Action::publish(msg).and_capture()
     }
 
@@ -116,8 +183,8 @@ impl Soundscape {
         let spacing = spacing * (n as f32).exp2();
 
         let stroke = Stroke::default()
-            .with_width(Self::STROKE_WIDTH)
-            .with_color(theme.palette().text.scale_alpha(Self::STROKE_ALPHA));
+            .with_width(Self::GRID_STROKE_WIDTH)
+            .with_color(theme.palette().text.scale_alpha(Self::GRID_STROKE_ALPHA));
 
         self.draw_gridlines(frame, spacing, bounds, Direction::Vertical, stroke);
         self.draw_gridlines(frame, spacing, bounds, Direction::Horizontal, stroke);
@@ -147,8 +214,8 @@ impl Soundscape {
 
         let amount = (main_length / spacing).ceil() as u32;
         let position = match direction {
-            Direction::Vertical => self.position.x,
-            Direction::Horizontal => self.position.y,
+            Direction::Vertical => self.camera.x,
+            Direction::Horizontal => self.camera.y,
         };
         let offset = (main_length / 2.0 + position * self.scale) % spacing;
         for i in 0..amount {
@@ -168,6 +235,12 @@ enum Direction {
     Horizontal,
 }
 
+impl Default for Soundscape {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Program<Message> for Soundscape {
     type State = State;
 
@@ -183,8 +256,30 @@ impl Program<Message> for Soundscape {
         let center_origin_transform = Vector::new(bounds.width, bounds.height) / 2.0;
         frame.translate(center_origin_transform);
         frame.scale(self.scale);
-        frame.translate(self.position);
-        let path = Path::circle((0.0, 0.0).into(), self.radius);
+        frame.translate(self.camera.into());
+
+        for point in &self.waypoints {
+            let path = Path::circle(point.into(), Self::WAYPOINT_RADIUS);
+            frame.fill(&path, theme.palette().text);
+        }
+
+        let path = Path::new(|p| {
+            p.move_to(self.listener.position.into());
+            for point in &self.waypoints {
+                p.line_to(point.into());
+            }
+        });
+        frame.stroke(
+            &path,
+            Stroke::default()
+                .with_width(1.0)
+                .with_color(theme.palette().text.scale_alpha(0.8)),
+        );
+
+        let path = Path::circle(
+            (self.listener.position.x, self.listener.position.y).into(),
+            Self::LISTENER_RADIUS,
+        );
         frame.fill(&path, theme.palette().primary);
 
         let mut grid_frame = Frame::new(renderer, bounds.size());
@@ -209,7 +304,7 @@ impl Program<Message> for Soundscape {
                         original_position,
                     } => {
                         let action =
-                            self.calculate_pan(*position, *cursor_start, *original_position);
+                            self.calculate_pan(Vector2::from(position) - *cursor_start,  *original_position);
                         Some(action)
                     }
                     State::None => None,
@@ -217,8 +312,11 @@ impl Program<Message> for Soundscape {
                 mouse::Event::ButtonPressed(button) => match button {
                     mouse::Button::Left => {
                         *state = State::Panning {
-                            cursor_start: cursor.position().unwrap_or_else(|| (0.0, 0.0).into()),
-                            original_position: self.position,
+                            cursor_start: cursor
+                                .position()
+                                .unwrap_or_else(|| (0.0, 0.0).into())
+                                .into(),
+                            original_position: self.camera,
                         };
                         None
                     }
@@ -230,10 +328,25 @@ impl Program<Message> for Soundscape {
                 }
                 mouse::Event::WheelScrolled { delta } => match *delta {
                     mouse::ScrollDelta::Lines { y, .. } | mouse::ScrollDelta::Pixels { y, .. } => {
-                        let action = self.calculate_zoom(cursor.position_from(bounds.center()), y);
+                        let action = self.calculate_zoom(
+                            cursor.position_from(bounds.center()).map(Vector2::from),
+                            y,
+                        );
                         Some(action)
                     }
                 },
+                _ => None,
+            },
+            Event::Keyboard(event) => match event {
+                keyboard::Event::KeyPressed {
+                    physical_key: keyboard::key::Physical::Code(keyboard::key::Code::KeyW),
+                    repeat: false,
+                    ..
+                } => {
+                    let position = (cursor.position()? - bounds.center()).into();
+                    let msg = Message::NewWaypoint(position);
+                    Some(canvas::Action::publish(msg).and_capture())
+                }
                 _ => None,
             },
             _ => None,

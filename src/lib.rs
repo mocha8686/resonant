@@ -6,3 +6,6 @@
 
 pub mod soundscape;
 pub mod track;
+mod vector;
+
+pub use vector::Vector2;
