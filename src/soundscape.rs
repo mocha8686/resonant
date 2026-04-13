@@ -113,7 +113,10 @@ impl Soundscape {
                 }
             }
             Message::NewWaypoint(point) => {
-                if let Some(waypoint) = self.waypoints.back() && (point - *waypoint).square_magnitude() < Self::OVERLAP_THRESHOLD * Self::OVERLAP_THRESHOLD {
+                if let Some(waypoint) = self.waypoints.back()
+                    && (point - *waypoint).square_magnitude()
+                        < Self::OVERLAP_THRESHOLD * Self::OVERLAP_THRESHOLD
+                {
                     self.waypoints.pop_back();
                 }
                 self.waypoints.push_back(point);
@@ -162,14 +165,14 @@ impl Soundscape {
         }
     }
 
-    fn calculate_pan(
-        &self,
-        delta: Vector2,
-        original_position: Vector2,
-    ) -> Action<Message> {
+    fn calculate_pan(&self, delta: Vector2, original_position: Vector2) -> Action<Message> {
         let new_position = original_position + delta / self.scale;
         let msg = Message::Translated { new_position };
         canvas::Action::publish(msg).and_capture()
+    }
+
+    fn screen_to_world(&self, screen: Vector2, screen_center: Vector2) -> Vector2 {
+        (screen - screen_center) / self.scale - self.camera
     }
 
     #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
@@ -303,8 +306,10 @@ impl Program<Message> for Soundscape {
                         cursor_start,
                         original_position,
                     } => {
-                        let action =
-                            self.calculate_pan(Vector2::from(position) - *cursor_start,  *original_position);
+                        let action = self.calculate_pan(
+                            Vector2::from(position) - *cursor_start,
+                            *original_position,
+                        );
                         Some(action)
                     }
                     State::None => None,
@@ -343,7 +348,7 @@ impl Program<Message> for Soundscape {
                     repeat: false,
                     ..
                 } => {
-                    let position = (cursor.position()? - bounds.center()).into();
+                    let position = self.screen_to_world(cursor.position()?.into(), bounds.center().into());
                     let msg = Message::NewWaypoint(position);
                     Some(canvas::Action::publish(msg).and_capture())
                 }
