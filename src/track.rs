@@ -1,8 +1,9 @@
 use std::{path::PathBuf, time::Duration};
 
 use anyhow::Result;
+use futures_time::task;
 use iced::{
-    Element, Theme,
+    Element, Task, Theme,
     mouse::Interaction,
     widget::{button, column, mouse_area, progress_bar, svg, text},
 };
@@ -21,6 +22,7 @@ pub enum Message {
     ProgressMove(f32),
     ProgressHold,
     ProgressRelease,
+    Seeked,
 }
 
 pub struct Track {
@@ -31,6 +33,7 @@ pub struct Track {
     offset: f32,
     cursor_pos: f32,
     cursor_held: bool,
+    seeking: bool,
 }
 
 impl Track {
@@ -40,6 +43,7 @@ impl Track {
         duration: Duration::from_secs(1),
         easing: Easing::InPowi(2),
     };
+    const PROGRESS_DEBOUNCE_INTERVAL: u64 = 15;
 
     pub fn new(path: PathBuf) -> Result<Self> {
         let name = path
@@ -60,32 +64,38 @@ impl Track {
             offset: 0.0,
             cursor_pos: 0.0,
             cursor_held: false,
+            seeking: false,
         })
     }
 
-    pub fn update(&mut self, msg: Message) {
+    pub fn update(&mut self, msg: Message) -> Task<Message> {
         match msg {
             Message::Play => {
                 if let Some(handle) = &mut self.handle {
                     handle.resume(Self::PLAY_PAUSE_TWEEN);
                 } else {
-                    self.start_track()
-                        .expect("should be able to start track");
+                    self.start_track().expect("should be able to start track");
                 }
+                None
             }
             Message::Pause => {
                 let Some(handle) = &mut self.handle else {
-                    return;
+                    return Task::none();
                 };
                 handle.pause(Self::PLAY_PAUSE_TWEEN);
+                None
             }
             Message::ProgressMove(v) => {
                 self.cursor_pos = v;
+                None
             }
             Message::ProgressHold => {
                 self.cursor_held = true;
+                self.seeking = true;
+                None
             }
             Message::ProgressRelease => {
+                self.cursor_held = false;
                 self.offset = self.cursor_pos;
 
                 if let Some(handle) = &mut self.handle {
@@ -94,20 +104,28 @@ impl Track {
                     self.start_track().expect("should be able to start track");
                 }
 
-                self.cursor_held = false;
+                Some(Task::perform(
+                    task::sleep(Duration::from_millis(Self::PROGRESS_DEBOUNCE_INTERVAL).into()),
+                    |_| Message::Seeked,
+                ))
+            }
+            Message::Seeked => {
+                if !self.cursor_held {
+                    self.seeking = false;
+                }
+                None
             }
         }
+        .unwrap_or_else(Task::none)
     }
 
     pub fn view(&self) -> Element<'_, Message> {
         let duration = self.data.unsliced_duration().as_secs_f32();
 
-        let value = if self.cursor_held {
+        let value = if self.seeking {
             self.cursor_pos
         } else {
-            self.handle
-                .as_ref()
-                .map_or(0.0, |h| h.position() as f32)
+            self.handle.as_ref().map_or(0.0, |h| h.position() as f32)
         };
 
         let progress = mouse_area(

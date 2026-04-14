@@ -1,5 +1,6 @@
 use iced::{
-    Element, Subscription, widget::{button, column, container, row, stack, text}
+    Element, Subscription, Task,
+    widget::{button, column, container, row, stack, text},
 };
 use resonant::{
     soundscape::{self, Soundscape},
@@ -30,34 +31,34 @@ impl Default for State {
 }
 
 impl State {
-    fn update(&mut self, msg: MainMessage) {
+    fn update(&mut self, msg: MainMessage) -> Task<MainMessage> {
         match msg {
             MainMessage::Track(msg, index) => {
                 let Some(track) = self.tracks.get_mut(index) else {
-                    return;
+                    return Task::none();
                 };
-                track.update(msg);
+                Some(track.update(msg).map(move |m| MainMessage::Track(m, index)))
             }
             MainMessage::Soundscape(msg) => {
                 self.soundscape.update(msg);
+                None
             }
             MainMessage::AddTrack => {
-                let Some(path) = FileDialog::new()
-                    .add_filter(
-                        "audio",
-                        &["flac", "mp3", "ogg", "wav", "webm"],
-                    )
+                if let Some(path) = FileDialog::new()
+                    .add_filter("audio", &["flac", "mp3", "ogg", "wav", "webm"])
                     .pick_file()
-                else {
-                    return;
-                };
-                let track = Track::new(path).expect("should be able to create track");
-                self.tracks.push(track);
+                {
+                    let track = Track::new(path).expect("should be able to create track");
+                    self.tracks.push(track);
+                }
+                None
             }
             MainMessage::RemoveTrack => {
                 self.tracks.pop();
+                None
             }
         }
+        .unwrap_or_else(Task::none)
     }
 
     fn view(&self) -> Element<'_, MainMessage> {
@@ -84,11 +85,7 @@ impl State {
 
         let canvas = self.soundscape.view().map(MainMessage::Soundscape);
 
-        stack![
-            canvas,
-            container(track_menu).padding(4),
-        ]
-        .into()
+        stack![canvas, container(track_menu).padding(4),].into()
     }
 
     fn subscription(&self) -> Subscription<MainMessage> {
