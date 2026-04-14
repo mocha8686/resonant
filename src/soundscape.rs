@@ -206,20 +206,12 @@ impl Soundscape {
         direction: Direction,
         theme: &Theme,
     ) {
-        let main_length = match direction {
-            Direction::Vertical => bounds.width,
-            Direction::Horizontal => bounds.height,
-        };
-        let cross_length = match direction {
-            Direction::Vertical => bounds.height,
-            Direction::Horizontal => bounds.width,
+        let (main_length, cross_length, position) = match direction {
+            Direction::Vertical => (bounds.width, bounds.height, self.camera.x),
+            Direction::Horizontal => (bounds.height, bounds.width, self.camera.y),
         };
 
         let amount = (main_length / spacing).ceil() as u32;
-        let position = match direction {
-            Direction::Vertical => self.camera.x,
-            Direction::Horizontal => self.camera.y,
-        };
         let offset = (main_length / 2.0 + position * self.scale) % spacing;
 
         for i in 0..amount {
