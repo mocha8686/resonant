@@ -1,5 +1,6 @@
 use iced::{
-    Element, Subscription, widget::{button, column, container, row, stack}
+    Element, Subscription,
+    widget::{button, column, container, row, stack},
 };
 use resonant::{
     soundscape::{self, Soundscape},
@@ -43,7 +44,10 @@ impl State {
             }
             MainMessage::AddTrack => {
                 let Some(path) = FileDialog::new()
-                    .add_filter("audio", &["mp3", "ogg", "wav", "m4a"])
+                    .add_filter(
+                        "audio",
+                        &["flac", "mka", "mkv", "mp3", "ogg", "wav", "webm"],
+                    )
                     .pick_file()
                 else {
                     return;
@@ -70,7 +74,7 @@ impl State {
             button("+").on_press(MainMessage::AddTrack),
             button("-").on_press(MainMessage::RemoveTrack),
         ])
-        .style(container::primary);
+        .style(container::bordered_box);
         let canvas = self.soundscape.view().map(MainMessage::Soundscape);
 
         stack![canvas, track_menu].into()
