@@ -70,8 +70,14 @@ impl Track {
             .unwrap_or("Unknown filename")
             .to_string();
 
-        let is_paused = self.player.as_ref().map_or(true, rodio::Player::is_paused);
-        let icon = if is_paused {
+        column![
+            text(filename),
+            self.play_pause(),
+        ].into()
+    }
+
+    fn play_pause(&self) -> Element<'_, Message> {
+        let icon = if self.is_paused() {
             include_bytes!("icons/play.svg").as_slice()
         } else {
             include_bytes!("icons/pause.svg").as_slice()
@@ -84,14 +90,16 @@ impl Track {
             .width(16)
             .height(16);
 
-        column![
-            text(filename),
-            button(svg).on_press(if is_paused {
+        button(svg)
+            .on_press(if self.is_paused() {
                 Message::Play
             } else {
                 Message::Pause
             })
-        ]
-        .into()
+            .into()
+    }
+
+    fn is_paused(&self) -> bool {
+        self.player.as_ref().is_none_or(rodio::Player::is_paused)
     }
 }
