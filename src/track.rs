@@ -1,14 +1,8 @@
 use std::{fs::File, io::BufReader, path::PathBuf};
 
 use iced::{
-    Element,
-    Length::Fill,
-    Theme,
-    widget::{
-        button, column, container, svg,
-        svg::{Handle, Style},
-        text,
-    },
+    Element, Theme,
+    widget::{button, column, svg, text},
 };
 use rodio::{DeviceSinkBuilder, MixerDeviceSink, Player};
 
@@ -70,10 +64,7 @@ impl Track {
             .unwrap_or("Unknown filename")
             .to_string();
 
-        column![
-            text(filename),
-            self.play_pause(),
-        ].into()
+        column![text(filename), self.play_pause(),].into()
     }
 
     fn play_pause(&self) -> Element<'_, Message> {
@@ -82,21 +73,22 @@ impl Track {
         } else {
             include_bytes!("icons/pause.svg").as_slice()
         };
-        let handle = Handle::from_memory(icon);
+        let handle = svg::Handle::from_memory(icon);
         let svg = svg(handle)
-            .style(|theme: &Theme, _| Style {
+            .style(|theme: &Theme, _| svg::Style {
                 color: Some(theme.palette().text),
             })
             .width(16)
             .height(16);
 
-        button(svg)
-            .on_press(if self.is_paused() {
-                Message::Play
+        let (message, style): (Message, fn(&Theme, button::Status) -> button::Style) =
+            if self.is_paused() {
+                (Message::Play, button::background)
             } else {
-                Message::Pause
-            })
-            .into()
+                (Message::Pause, button::primary)
+            };
+
+        button(svg).on_press(message).style(style).into()
     }
 
     fn is_paused(&self) -> bool {
