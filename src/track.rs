@@ -1,11 +1,9 @@
 use std::{path::PathBuf, time::Duration};
 
 use anyhow::Result;
-use futures_time::task;
 use iced::{
     Element, Task, Theme,
-    mouse::Interaction,
-    widget::{button, column, mouse_area, progress_bar, svg, text},
+    widget::{button, column, svg, text},
 };
 use kira::{
     AudioManager, AudioManagerSettings, Easing, StartTime, Tween,
@@ -15,14 +13,15 @@ use kira::{
     },
 };
 
+use crate::track::progress::Progress;
+
+mod progress;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Message {
     Play,
     Pause,
-    ProgressMove(f32),
-    ProgressHold,
-    ProgressRelease,
-    Seeked,
+    Progress(progress::Message),
 }
 
 pub struct Track {
@@ -30,20 +29,15 @@ pub struct Track {
     data: StaticSoundData,
     manager: AudioManager,
     handle: Option<StaticSoundHandle>,
-    offset: f32,
-    cursor_pos: f32,
-    cursor_held: bool,
-    seeking: bool,
+    progress: Progress,
 }
 
 impl Track {
-    const PROGRESS_LENGTH: u32 = 200;
     const PLAY_PAUSE_TWEEN: Tween = Tween {
         start_time: StartTime::Immediate,
         duration: Duration::from_secs(1),
         easing: Easing::InPowi(2),
     };
-    const PROGRESS_DEBOUNCE_INTERVAL: u64 = 15;
 
     pub fn new(path: PathBuf) -> Result<Self> {
         let name = path
@@ -55,16 +49,14 @@ impl Track {
 
         let data = StaticSoundData::from_file(path)?;
         let manager = AudioManager::new(AudioManagerSettings::default())?;
+        let duration = data.unsliced_duration().as_secs_f32();
 
         Ok(Self {
             name,
             data,
             manager,
             handle: None,
-            offset: 0.0,
-            cursor_pos: 0.0,
-            cursor_held: false,
-            seeking: false,
+            progress: Progress::new(duration),
         })
     }
 
@@ -74,7 +66,8 @@ impl Track {
                 if let Some(handle) = &mut self.handle {
                     handle.resume(Self::PLAY_PAUSE_TWEEN);
                 } else {
-                    self.start_track().expect("should be able to start track");
+                    self.start_track(None)
+                        .expect("should be able to start track");
                 }
                 None
             }
@@ -85,60 +78,31 @@ impl Track {
                 handle.pause(Self::PLAY_PAUSE_TWEEN);
                 None
             }
-            Message::ProgressMove(v) => {
-                self.cursor_pos = v;
-                None
-            }
-            Message::ProgressHold => {
-                self.cursor_held = true;
-                self.seeking = true;
-                None
-            }
-            Message::ProgressRelease => {
-                self.cursor_held = false;
-                self.offset = self.cursor_pos;
-
-                if let Some(handle) = &mut self.handle {
-                    handle.seek_to(self.cursor_pos as f64);
-                } else {
-                    self.start_track().expect("should be able to start track");
+            Message::Progress(m) => {
+                if m == progress::Message::Release {
+                    if let Some(handle) = &mut self.handle {
+                        handle.seek_to(self.progress.offset());
+                    } else {
+                        self.start_track(Some(self.progress.offset()))
+                            .expect("should be able to start track");
+                    }
                 }
 
-                Some(Task::perform(
-                    task::sleep(Duration::from_millis(Self::PROGRESS_DEBOUNCE_INTERVAL).into()),
-                    |_| Message::Seeked,
-                ))
-            }
-            Message::Seeked => {
-                if !self.cursor_held {
-                    self.seeking = false;
-                }
-                None
+                Some(self.progress.update(m).map(Message::Progress))
             }
         }
         .unwrap_or_else(Task::none)
     }
 
     pub fn view(&self) -> Element<'_, Message> {
-        let duration = self.data.unsliced_duration().as_secs_f32();
-
-        let value = if self.seeking {
-            self.cursor_pos
-        } else {
-            self.handle.as_ref().map_or(0.0, |h| h.position() as f32)
-        };
-
-        let progress = mouse_area(
-            progress_bar(0.0..=duration, value)
-                .length(Self::PROGRESS_LENGTH)
-                .girth(8),
-        )
-        .interaction(Interaction::Pointer)
-        .on_move(move |p| Message::ProgressMove(p.x * duration / Self::PROGRESS_LENGTH as f32))
-        .on_press(Message::ProgressHold)
-        .on_release(Message::ProgressRelease);
-
-        column![text(self.name.clone()), progress, self.play_pause()].into()
+        column![
+            text(self.name.clone()),
+            self.progress
+                .view(self.track_position())
+                .map(Message::Progress),
+            self.play_pause()
+        ]
+        .into()
     }
 
     fn play_pause(&self) -> Element<'_, Message> {
@@ -171,10 +135,14 @@ impl Track {
         })
     }
 
-    fn start_track(&mut self) -> Result<()> {
+    fn start_track(&mut self, offset: Option<f64>) -> Result<()> {
         let mut handle = self.manager.play(self.data.clone())?;
-        handle.seek_to(self.offset as f64);
+        handle.seek_to(offset.unwrap_or(0.0));
         self.handle.replace(handle);
         Ok(())
+    }
+
+    fn track_position(&self) -> f32 {
+        self.handle.as_ref().map_or(0.0, |h| h.position() as f32)
     }
 }
