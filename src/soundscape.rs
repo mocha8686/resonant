@@ -210,7 +210,7 @@ impl Soundscape {
 
         let world_spacing = Self::SPACING * (n as f32).exp2();
         let spacing = world_spacing * self.scale;
-        let amount = (main_length / spacing).ceil() as u32;
+        let amount = (main_length / spacing).ceil() as u32 + 1;
         let offset = (main_length / 2.0 + position * self.scale) % spacing;
 
         for i in 0..amount {
