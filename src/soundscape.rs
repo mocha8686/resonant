@@ -186,10 +186,8 @@ impl Soundscape {
         let n_max = (Self::MAX_SPACING_WIDTH / spacing).log2().floor() as i32;
         let n = max_by_key(n_min, n_max, |n: &i32| n.abs());
 
-        let spacing = spacing * (n as f32).exp2();
-
-        self.draw_gridlines(frame, spacing, n, bounds, Direction::Vertical, theme);
-        self.draw_gridlines(frame, spacing, n, bounds, Direction::Horizontal, theme);
+        self.draw_gridlines(frame, n, bounds, Direction::Vertical, theme);
+        self.draw_gridlines(frame, n, bounds, Direction::Horizontal, theme);
     }
 
     #[allow(
@@ -200,7 +198,6 @@ impl Soundscape {
     fn draw_gridlines(
         &self,
         frame: &mut Frame,
-        spacing: f32,
         n: i32,
         bounds: Rectangle,
         direction: Direction,
@@ -211,6 +208,8 @@ impl Soundscape {
             Direction::Horizontal => (bounds.height, bounds.width, self.camera.y),
         };
 
+        let world_spacing = Self::SPACING * (n as f32).exp2();
+        let spacing = world_spacing * self.scale;
         let amount = (main_length / spacing).ceil() as u32;
         let offset = (main_length / 2.0 + position * self.scale) % spacing;
 
@@ -226,7 +225,6 @@ impl Soundscape {
                 Direction::Vertical => top_left.x,
                 Direction::Horizontal => top_left.y,
             };
-            let world_spacing = Self::SPACING * (n as f32).exp2();
             let start_rounded = (start / world_spacing).trunc() * world_spacing;
             let world_position = start_rounded + world_spacing * i as f32;
 
