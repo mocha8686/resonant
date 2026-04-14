@@ -54,15 +54,17 @@ struct Listener {
 impl Soundscape {
     const GRID_STROKE_WIDTH: f32 = 1.0;
     const GRID_STROKE_ALPHA: f32 = 0.3;
+    const GRID_TEXT_PAD: f32 = 10.0;
+    const GRID_TEXT_SIZE: u32 = 14;
 
     const MIN_SCALE: f32 = 0.25;
     const MAX_SCALE: f32 = 2.0;
 
     const SCROLL_SENSITIVITY: f32 = 1.0 / 100.0;
 
-    const MIN_SPACING: f32 = 75.0;
-    const DEFAULT_SPACING: f32 = 100.0;
-    const MAX_SPACING: f32 = 125.0;
+    const SPACING: f32 = 100.0;
+    const MIN_SPACING_WIDTH: f32 = 75.0;
+    const MAX_SPACING_WIDTH: f32 = 125.0;
 
     const LISTENER_RADIUS: f32 = 25.0;
     const WAYPOINT_RADIUS: f32 = 5.0;
@@ -177,20 +179,16 @@ impl Soundscape {
 
     #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
     fn draw_grid(&self, frame: &mut Frame, theme: &Theme, bounds: Rectangle) {
-        let spacing = Self::DEFAULT_SPACING * self.scale;
+        let spacing = Self::SPACING * self.scale;
 
-        let n_min = (Self::MIN_SPACING / spacing).log2().ceil() as i32;
-        let n_max = (Self::MAX_SPACING / spacing).log2().floor() as i32;
+        let n_min = (Self::MIN_SPACING_WIDTH / spacing).log2().ceil() as i32;
+        let n_max = (Self::MAX_SPACING_WIDTH / spacing).log2().floor() as i32;
         let n = max_by_key(n_min, n_max, |n: &i32| n.abs());
 
         let spacing = spacing * (n as f32).exp2();
 
-        let stroke = Stroke::default()
-            .with_width(Self::GRID_STROKE_WIDTH)
-            .with_color(theme.palette().text.scale_alpha(Self::GRID_STROKE_ALPHA));
-
-        self.draw_gridlines(frame, spacing, bounds, Direction::Vertical, stroke);
-        self.draw_gridlines(frame, spacing, bounds, Direction::Horizontal, stroke);
+        self.draw_gridlines(frame, spacing, n, bounds, Direction::Vertical, theme);
+        self.draw_gridlines(frame, spacing, n, bounds, Direction::Horizontal, theme);
     }
 
     #[allow(
@@ -202,10 +200,15 @@ impl Soundscape {
         &self,
         frame: &mut Frame,
         spacing: f32,
+        n: i32,
         bounds: Rectangle,
         direction: Direction,
-        stroke: Stroke,
+        theme: &Theme,
     ) {
+        let stroke = Stroke::default()
+            .with_width(Self::GRID_STROKE_WIDTH)
+            .with_color(theme.palette().text.scale_alpha(Self::GRID_STROKE_ALPHA));
+
         let main_length = match direction {
             Direction::Vertical => bounds.width,
             Direction::Horizontal => bounds.height,
@@ -228,6 +231,30 @@ impl Soundscape {
                 Direction::Horizontal => Path::line((0.0, c).into(), (cross_length, c).into()),
             };
             frame.stroke(&path, stroke);
+
+            let top_left = self.screen_to_world(Vector2::new(0.0, 0.0), bounds.center().into());
+            let start = match direction {
+                Direction::Vertical => top_left.x,
+                Direction::Horizontal => top_left.y,
+            };
+            let world_spacing = Self::SPACING * (n as f32).exp2();
+            let start_rounded = (start / world_spacing).trunc() * world_spacing;
+
+            let text = canvas::Text {
+                content: (start_rounded + world_spacing * i as f32).abs().to_string(),
+                position: match direction {
+                    Direction::Vertical => {
+                        iced::Point::new(c + 4.0, cross_length - Self::GRID_TEXT_PAD)
+                    }
+                    Direction::Horizontal => iced::Point::new(Self::GRID_TEXT_PAD, c),
+                },
+                color: theme.palette().text.scale_alpha(Self::GRID_STROKE_ALPHA),
+                align_x: iced::widget::text::Alignment::Left,
+                align_y: iced::alignment::Vertical::Bottom,
+                size: iced::Pixels::from(Self::GRID_TEXT_SIZE),
+                ..Default::default()
+            };
+            frame.fill_text(text);
         }
     }
 }
@@ -348,7 +375,8 @@ impl Program<Message> for Soundscape {
                     repeat: false,
                     ..
                 } => {
-                    let position = self.screen_to_world(cursor.position()?.into(), bounds.center().into());
+                    let position =
+                        self.screen_to_world(cursor.position()?.into(), bounds.center().into());
                     let msg = Message::NewWaypoint(position);
                     Some(canvas::Action::publish(msg).and_capture())
                 }
