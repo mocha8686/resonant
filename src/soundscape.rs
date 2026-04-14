@@ -228,7 +228,7 @@ impl Soundscape {
             let start_rounded = (start / world_spacing).trunc() * world_spacing;
             let world_position = start_rounded + world_spacing * i as f32;
 
-            let is_highlight = (world_position % (world_spacing * 4.0)) == 0.0;
+            let is_highlight = world_position.abs() % (world_spacing * 4.0) <= f32::EPSILON;
             let alpha = if is_highlight { Self::GRID_ALPHA_HIGHLIGHT } else { Self::GRID_ALPHA_NORMAL };
 
             let stroke = Stroke::default()
