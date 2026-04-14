@@ -229,7 +229,11 @@ impl Soundscape {
             let world_position = start_rounded + world_spacing * i as f32;
 
             let is_highlight = world_position.abs() % (world_spacing * 4.0) <= f32::EPSILON;
-            let alpha = if is_highlight { Self::GRID_ALPHA_HIGHLIGHT } else { Self::GRID_ALPHA_NORMAL };
+            let alpha = if is_highlight {
+                Self::GRID_ALPHA_HIGHLIGHT
+            } else {
+                Self::GRID_ALPHA_NORMAL
+            };
 
             let stroke = Stroke::default()
                 .with_width(Self::GRID_STROKE_WIDTH)
@@ -322,6 +326,10 @@ impl Program<Message> for Soundscape {
         bounds: Rectangle,
         cursor: mouse::Cursor,
     ) -> Option<Action<Message>> {
+        if cursor.is_levitating() {
+            return None;
+        };
+
         match event {
             Event::Mouse(event) => match event {
                 mouse::Event::CursorMoved { position } => match state {
