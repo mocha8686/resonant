@@ -46,7 +46,7 @@ impl State {
                 let Some(path) = FileDialog::new()
                     .add_filter(
                         "audio",
-                        &["flac", "mka", "mkv", "mp3", "ogg", "wav", "webm"],
+                        &["flac", "mp3", "ogg", "wav", "webm"],
                     )
                     .pick_file()
                 else {
