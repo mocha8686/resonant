@@ -53,9 +53,10 @@ struct Listener {
 
 impl Soundscape {
     const GRID_STROKE_WIDTH: f32 = 1.0;
-    const GRID_STROKE_ALPHA: f32 = 0.3;
     const GRID_TEXT_PAD: f32 = 10.0;
     const GRID_TEXT_SIZE: u32 = 14;
+    const GRID_ALPHA_NORMAL: f32 = 0.3;
+    const GRID_ALPHA_HIGHLIGHT: f32 = 0.8;
 
     const MIN_SCALE: f32 = 0.25;
     const MAX_SCALE: f32 = 2.0;
@@ -205,10 +206,6 @@ impl Soundscape {
         direction: Direction,
         theme: &Theme,
     ) {
-        let stroke = Stroke::default()
-            .with_width(Self::GRID_STROKE_WIDTH)
-            .with_color(theme.palette().text.scale_alpha(Self::GRID_STROKE_ALPHA));
-
         let main_length = match direction {
             Direction::Vertical => bounds.width,
             Direction::Horizontal => bounds.height,
@@ -224,13 +221,13 @@ impl Soundscape {
             Direction::Horizontal => self.camera.y,
         };
         let offset = (main_length / 2.0 + position * self.scale) % spacing;
+
         for i in 0..amount {
             let c = i as f32 * spacing + offset;
             let path = match direction {
                 Direction::Vertical => Path::line((c, 0.0).into(), (c, cross_length).into()),
                 Direction::Horizontal => Path::line((0.0, c).into(), (cross_length, c).into()),
             };
-            frame.stroke(&path, stroke);
 
             let top_left = self.screen_to_world(Vector2::new(0.0, 0.0), bounds.center().into());
             let start = match direction {
@@ -239,16 +236,25 @@ impl Soundscape {
             };
             let world_spacing = Self::SPACING * (n as f32).exp2();
             let start_rounded = (start / world_spacing).trunc() * world_spacing;
+            let world_position = start_rounded + world_spacing * i as f32;
 
+            let is_highlight = (world_position % (world_spacing * 4.0)) == 0.0;
+            let alpha = if is_highlight { Self::GRID_ALPHA_HIGHLIGHT } else { Self::GRID_ALPHA_NORMAL };
+
+            let stroke = Stroke::default()
+                .with_width(Self::GRID_STROKE_WIDTH)
+                .with_color(theme.palette().text.scale_alpha(alpha));
+
+            frame.stroke(&path, stroke);
             let text = canvas::Text {
-                content: (start_rounded + world_spacing * i as f32).abs().to_string(),
+                content: world_position.abs().to_string(),
                 position: match direction {
                     Direction::Vertical => {
                         iced::Point::new(c + 4.0, cross_length - Self::GRID_TEXT_PAD)
                     }
                     Direction::Horizontal => iced::Point::new(Self::GRID_TEXT_PAD, c),
                 },
-                color: theme.palette().text.scale_alpha(Self::GRID_STROKE_ALPHA),
+                color: theme.palette().text.scale_alpha(alpha),
                 align_x: iced::widget::text::Alignment::Left,
                 align_y: iced::alignment::Vertical::Bottom,
                 size: iced::Pixels::from(Self::GRID_TEXT_SIZE),
