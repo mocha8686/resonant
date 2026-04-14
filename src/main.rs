@@ -1,6 +1,5 @@
 use iced::{
-    Element, Subscription,
-    widget::{button, column, container, row, stack, text},
+    Element, Subscription, widget::{button, column, container, row, stack, text}
 };
 use resonant::{
     soundscape::{self, Soundscape},
@@ -52,7 +51,7 @@ impl State {
                 else {
                     return;
                 };
-                let track = Track::new(path);
+                let track = Track::new(path).expect("should be able to create track");
                 self.tracks.push(track);
             }
             MainMessage::RemoveTrack => {
@@ -69,20 +68,27 @@ impl State {
                 .map(|(index, track)| track.view().map(move |msg| MainMessage::Track(msg, index))),
         );
 
-        let track_menu = container(column![
-            text("Tracklist"),
-            tracks,
-            row![
-                button("+").on_press(MainMessage::AddTrack),
-                button("-").on_press(MainMessage::RemoveTrack),
-            ],
-        ].spacing(16))
+        let track_menu = container(
+            column![
+                text("Tracklist"),
+                tracks,
+                row![
+                    button("+").on_press(MainMessage::AddTrack),
+                    button("-").on_press(MainMessage::RemoveTrack),
+                ],
+            ]
+            .spacing(16),
+        )
         .padding(16)
         .style(container::bordered_box);
 
         let canvas = self.soundscape.view().map(MainMessage::Soundscape);
 
-        stack![canvas, container(track_menu).padding(4)].into()
+        stack![
+            canvas,
+            container(track_menu).padding(4),
+        ]
+        .into()
     }
 
     fn subscription(&self) -> Subscription<MainMessage> {

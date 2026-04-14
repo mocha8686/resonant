@@ -328,7 +328,7 @@ impl Program<Message> for Soundscape {
     ) -> Option<Action<Message>> {
         if cursor.is_levitating() {
             return None;
-        };
+        }
 
         match event {
             Event::Mouse(event) => match event {
