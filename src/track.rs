@@ -2,25 +2,22 @@ use std::{path::PathBuf, time::Duration};
 
 use anyhow::Result;
 use iced::{
-    Element, Task, Theme,
-    widget::{button, column, svg, text},
+    Element, Task,
+    widget::{column, text},
 };
 use kira::{
     AudioManager, AudioManagerSettings, Easing, StartTime, Tween,
-    sound::{
-        PlaybackState,
-        static_sound::{StaticSoundData, StaticSoundHandle},
-    },
+    sound::static_sound::{StaticSoundData, StaticSoundHandle},
 };
 
-use crate::track::progress::Progress;
+use crate::track::{play_pause::PlayPause, progress::Progress};
 
+mod play_pause;
 mod progress;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Message {
-    Play,
-    Pause,
+    PlayPause(play_pause::Message),
     Progress(progress::Message),
 }
 
@@ -29,6 +26,7 @@ pub struct Track {
     data: StaticSoundData,
     manager: AudioManager,
     handle: Option<StaticSoundHandle>,
+    play_pause: PlayPause,
     progress: Progress,
 }
 
@@ -57,25 +55,18 @@ impl Track {
             manager,
             handle: None,
             progress: Progress::new(duration),
+            play_pause: PlayPause::new(),
         })
     }
 
     pub fn update(&mut self, msg: Message) -> Task<Message> {
         match msg {
-            Message::Play => {
-                if let Some(handle) = &mut self.handle {
-                    handle.resume(Self::PLAY_PAUSE_TWEEN);
-                } else {
-                    self.start_track(None)
-                        .expect("should be able to start track");
+            Message::PlayPause(m) => {
+                match m {
+                    play_pause::Message::Play => self.play(),
+                    play_pause::Message::Pause => self.pause(),
                 }
-                None
-            }
-            Message::Pause => {
-                let Some(handle) = &mut self.handle else {
-                    return Task::none();
-                };
-                handle.pause(Self::PLAY_PAUSE_TWEEN);
+                self.play_pause.update(m);
                 None
             }
             Message::Progress(m) => {
@@ -100,39 +91,24 @@ impl Track {
             self.progress
                 .view(self.track_position())
                 .map(Message::Progress),
-            self.play_pause()
+            self.play_pause.view().map(Message::PlayPause),
         ]
         .into()
     }
 
-    fn play_pause(&self) -> Element<'_, Message> {
-        let icon = if self.is_paused() {
-            include_bytes!("icons/play.svg").as_slice()
+    fn play(&mut self) {
+        if let Some(handle) = &mut self.handle {
+            handle.resume(Self::PLAY_PAUSE_TWEEN);
         } else {
-            include_bytes!("icons/pause.svg").as_slice()
-        };
-        let handle = svg::Handle::from_memory(icon);
-        let svg = svg(handle)
-            .style(|theme: &Theme, _| svg::Style {
-                color: Some(theme.palette().text),
-            })
-            .width(16)
-            .height(16);
-
-        let (message, style): (Message, fn(&Theme, button::Status) -> button::Style) =
-            if self.is_paused() {
-                (Message::Play, button::background)
-            } else {
-                (Message::Pause, button::primary)
-            };
-
-        button(svg).on_press(message).style(style).into()
+            self.start_track(None)
+                .expect("should be able to start track");
+        }
     }
 
-    fn is_paused(&self) -> bool {
-        self.handle.as_ref().is_none_or(|h| {
-            h.state() == PlaybackState::Pausing || h.state() == PlaybackState::Paused
-        })
+    fn pause(&mut self) {
+        if let Some(handle) = &mut self.handle {
+            handle.pause(Self::PLAY_PAUSE_TWEEN);
+        }
     }
 
     fn start_track(&mut self, offset: Option<f64>) -> Result<()> {
