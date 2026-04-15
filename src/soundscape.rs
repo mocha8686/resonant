@@ -3,7 +3,7 @@ use std::{cmp::max_by_key, collections::VecDeque, time::Instant};
 use iced::{
     Element, Event,
     Length::Fill,
-    Rectangle, Renderer, Subscription, Theme, Vector, keyboard,
+    Rectangle, Renderer, Subscription, Task, Theme, Vector, keyboard,
     mouse::{self, Cursor},
     widget::{
         Action,
@@ -25,6 +25,11 @@ pub enum Message {
     },
     NewFrame(Instant),
     NewWaypoint(Vector2),
+    ListenerMoved(Vector2),
+    NewTrack {
+        position: Vector2,
+        radius: f32,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -37,9 +42,16 @@ pub enum State {
     },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+struct TrackInfo {
+    position: Vector2,
+    radius: f32,
+}
+
 #[derive(Debug, Clone)]
 pub struct Soundscape {
     listener: Listener,
+    tracks: Vec<TrackInfo>,
     camera: Vector2,
     scale: f32,
     current: Instant,
@@ -77,6 +89,7 @@ impl Soundscape {
     pub fn new() -> Self {
         Self {
             listener: Listener::default(),
+            tracks: Vec::new(),
             camera: Vector2::ZERO,
             scale: 1.0,
             current: Instant::now(),
@@ -84,9 +97,12 @@ impl Soundscape {
         }
     }
 
-    pub fn update(&mut self, msg: Message) {
+    pub fn update(&mut self, msg: Message) -> Task<Message> {
         match msg {
-            Message::Translated { new_position } => self.camera = new_position,
+            Message::Translated { new_position } => {
+                self.camera = new_position;
+                None
+            }
             Message::Scaled {
                 new_scale,
                 new_position,
@@ -95,24 +111,28 @@ impl Soundscape {
                 if let Some(new_position) = new_position {
                     self.camera = new_position;
                 }
+                None
             }
             Message::NewFrame(instant) => {
                 let dt = instant - self.current;
                 self.current = instant;
 
-                let Some(next_waypoint) = self.waypoints.front() else {
-                    return;
-                };
+                if let Some(next_waypoint) = self.waypoints.front() {
+                    let velocity =
+                        (*next_waypoint - self.listener.position).normalized() * Self::SPEED;
+                    let dv = velocity * dt.as_secs_f32();
+                    self.listener.position += dv;
 
-                let velocity = (*next_waypoint - self.listener.position).normalized() * Self::SPEED;
-                let dv = velocity * dt.as_secs_f32();
-                self.listener.position += dv;
+                    while let Some(next_waypoint) = self.waypoints.front()
+                        && (*next_waypoint - self.listener.position).square_magnitude()
+                            < dv.square_magnitude()
+                    {
+                        self.waypoints.pop_front();
+                    }
 
-                while let Some(next_waypoint) = self.waypoints.front()
-                    && (*next_waypoint - self.listener.position).square_magnitude()
-                        < dv.square_magnitude()
-                {
-                    self.waypoints.pop_front();
+                    Some(Task::done(Message::ListenerMoved(self.listener.position)))
+                } else {
+                    None
                 }
             }
             Message::NewWaypoint(point) => {
@@ -123,8 +143,15 @@ impl Soundscape {
                     self.waypoints.pop_back();
                 }
                 self.waypoints.push_back(point);
+                None
+            }
+            Message::ListenerMoved(_) => None,
+            Message::NewTrack { position, radius } => {
+                self.tracks.push(TrackInfo { position, radius });
+                None
             }
         }
+        .unwrap_or_else(Task::none)
     }
 
     #[must_use]
@@ -311,6 +338,12 @@ impl Program<Message> for Soundscape {
             Self::LISTENER_RADIUS,
         );
         frame.fill(&path, theme.palette().primary);
+
+        for track in &self.tracks {
+            let path = Path::circle(track.position.into(), track.radius);
+            frame.fill(&path, theme.extended_palette().primary.weak.color.scale_alpha(0.3));
+            frame.stroke(&path, Stroke::default().with_width(2.0).with_color(theme.extended_palette().primary.strong.color));
+        }
 
         let mut grid_frame = Frame::new(renderer, bounds.size());
         self.draw_grid(&mut grid_frame, theme, bounds);

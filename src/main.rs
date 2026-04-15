@@ -40,8 +40,19 @@ impl State {
                 Some(track.update(msg).map(move |m| MainMessage::Track(m, index)))
             }
             MainMessage::Soundscape(msg) => {
-                self.soundscape.update(msg);
-                None
+                let task = match msg {
+                    soundscape::Message::ListenerMoved(new_position) => {
+                        let tasks = self.tracks.iter_mut().enumerate().map(|(i, t)| {
+                            t.update(track::Message::ListenerMoved(new_position))
+                                .map(move |m| MainMessage::Track(m, i))
+                        });
+                        Task::batch(tasks)
+                    }
+                    _ => Task::none(),
+                };
+
+                let task = task.chain(self.soundscape.update(msg).map(MainMessage::Soundscape));
+                Some(task)
             }
             MainMessage::AddTrack => {
                 if let Some(path) = FileDialog::new()
@@ -49,9 +60,16 @@ impl State {
                     .pick_file()
                 {
                     let track = Track::new(path).expect("should be able to create track");
+                    let task = self.soundscape.update(soundscape::Message::NewTrack {
+                        position: track.position(),
+                        radius: track.radius(),
+                    }).map(MainMessage::Soundscape);
                     self.tracks.push(track);
+
+                    Some(task)
+                } else {
+                    None
                 }
-                None
             }
             MainMessage::RemoveTrack => {
                 self.tracks.pop();

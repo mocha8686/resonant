@@ -6,7 +6,7 @@ use iced::{
     widget::{column, text},
 };
 use kira::{
-    AudioManager, AudioManagerSettings, Easing, StartTime, Tween,
+    AudioManager, AudioManagerSettings, Decibels, Easing, StartTime, Tween, Tweenable,
     sound::{
         PlaybackState,
         static_sound::{StaticSoundData, StaticSoundHandle},
@@ -14,6 +14,7 @@ use kira::{
 };
 
 use crate::{
+    Vector2,
     components::Toggle,
     track::{looping::Loop, play_pause::PlayPause, progress::Progress},
 };
@@ -27,11 +28,14 @@ pub enum Message {
     PlayPause(play_pause::Message),
     Progress(progress::Message),
     Loop(looping::Message),
+    ListenerMoved(Vector2),
 }
 
 pub struct Track {
     name: String,
     data: StaticSoundData,
+    position: Vector2,
+    radius: f32,
     manager: AudioManager,
     handle: Option<StaticSoundHandle>,
     play_pause: PlayPause,
@@ -50,6 +54,7 @@ impl Track {
         duration: Duration::from_millis(0),
         easing: Easing::Linear,
     };
+    const ATTENUATION_STRENGTH: f64 = 10.0;
 
     pub fn new(path: PathBuf) -> Result<Self> {
         let name = path
@@ -66,6 +71,8 @@ impl Track {
         Ok(Self {
             name,
             data,
+            position: Vector2::default(),
+            radius: 500.0,
             manager,
             handle: None,
             progress: Progress::new(duration),
@@ -121,6 +128,18 @@ impl Track {
                 self.looping.update(m);
                 None
             }
+            Message::ListenerMoved(new_position) => {
+                if let Some(handle) = &mut self.handle {
+                    let t = 1.0 - (new_position - self.position).magnitude() / self.radius;
+                    let t_log = (t as f64 * (Self::ATTENUATION_STRENGTH - 1.0) + 1.0).log(Self::ATTENUATION_STRENGTH);
+
+                    handle.set_volume(
+                        Decibels::interpolate(Decibels::SILENCE, Decibels::IDENTITY, t_log),
+                        Self::TWEEN_INSTANT,
+                    );
+                }
+                None
+            }
         }
         .unwrap_or_else(Task::none)
     }
@@ -169,5 +188,13 @@ impl Track {
 
     fn track_position(&self) -> f32 {
         self.handle.as_ref().map_or(0.0, |h| h.position() as f32)
+    }
+
+    pub fn position(&self) -> Vector2 {
+        self.position
+    }
+
+    pub fn radius(&self) -> f32 {
+        self.radius
     }
 }
