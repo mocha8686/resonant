@@ -9,6 +9,7 @@
 
 pub mod soundscape;
 pub mod track;
+pub(crate) mod components;
 mod vector;
 
 pub use vector::Vector2;

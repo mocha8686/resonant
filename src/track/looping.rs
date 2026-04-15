@@ -1,7 +1,6 @@
-use iced::{
-    Element, Theme,
-    widget::{button, svg},
-};
+use iced::{Element, widget::button};
+
+use crate::components::Icon;
 
 type ButtonStyler = fn(&iced::Theme, button::Status) -> button::Style;
 
@@ -34,16 +33,10 @@ impl Loop {
     }
 
     pub fn view(&self) -> Element<'_, Message> {
-        let icon = include_bytes!("../icons/loop.svg").as_slice();
-        let handle = svg::Handle::from_memory(icon);
-        let svg = svg(handle)
-            .style(|theme: &Theme, _| svg::Style {
-                color: Some(theme.palette().text),
-            })
-            .width(16)
-            .height(16);
+        let data = include_bytes!("../icons/loop.svg").as_slice();
+        let icon = Icon::new(data);
 
-        button(svg)
+        button(icon.view())
             .on_press(self.message())
             .style(self.style())
             .into()

@@ -1,4 +1,6 @@
-use iced::{Element, Theme, widget::{button, svg}};
+use iced::{Element, widget::button};
+
+use crate::components::Icon;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Message {
@@ -31,15 +33,12 @@ impl PlayPause {
     }
 
     pub fn view(&self) -> Element<'_, Message> {
-        let handle = svg::Handle::from_memory(self.icon());
-        let svg = svg(handle)
-            .style(|theme: &Theme, _| svg::Style {
-                color: Some(theme.palette().text),
-            })
-            .width(16)
-            .height(16);
+        let icon = Icon::new(self.icon());
 
-        button(svg).on_press(self.message()).style(self.style()).into()
+        button(icon.view())
+            .on_press(self.message())
+            .style(self.style())
+            .into()
     }
 
     pub fn is_playing(&self) -> bool {
