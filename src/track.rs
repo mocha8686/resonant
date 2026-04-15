@@ -10,8 +10,9 @@ use kira::{
     sound::static_sound::{StaticSoundData, StaticSoundHandle},
 };
 
-use crate::track::{play_pause::PlayPause, progress::Progress};
+use crate::track::{looping::Loop, play_pause::PlayPause, progress::Progress};
 
+mod looping;
 mod play_pause;
 mod progress;
 
@@ -19,6 +20,7 @@ mod progress;
 pub enum Message {
     PlayPause(play_pause::Message),
     Progress(progress::Message),
+    Loop(looping::Message),
 }
 
 pub struct Track {
@@ -28,6 +30,7 @@ pub struct Track {
     handle: Option<StaticSoundHandle>,
     play_pause: PlayPause,
     progress: Progress,
+    looping: Loop,
 }
 
 impl Track {
@@ -61,6 +64,7 @@ impl Track {
             handle: None,
             progress: Progress::new(duration),
             play_pause: PlayPause::new(),
+            looping: Loop::new(),
         })
     }
 
@@ -97,6 +101,20 @@ impl Track {
                         .map(Message::Progress),
                 )
             }
+            Message::Loop(m) => {
+                if let Some(handle) = &mut self.handle {
+                    match m {
+                        looping::Message::Loop => {
+                            handle.set_loop_region(0.0..);
+                        }
+                        looping::Message::Unloop => {
+                            handle.set_loop_region(None);
+                        }
+                    }
+                }
+                self.looping.update(m);
+                None
+            }
         }
         .unwrap_or_else(Task::none)
     }
@@ -108,6 +126,7 @@ impl Track {
                 .view(self.track_position())
                 .map(Message::Progress),
             self.play_pause.view().map(Message::PlayPause),
+            self.looping.view().map(Message::Loop),
         ]
         .into()
     }
@@ -130,6 +149,11 @@ impl Track {
     fn create_track(&mut self, offset: Option<f64>) -> Result<&mut StaticSoundHandle> {
         let mut handle = self.manager.play(self.data.clone())?;
         handle.seek_to(offset.unwrap_or(0.0));
+
+        if self.looping.is_looping() {
+            handle.set_loop_region(0.0..);
+        }
+
         self.handle.replace(handle);
         Ok(self.handle.as_mut().unwrap())
     }
