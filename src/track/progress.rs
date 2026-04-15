@@ -10,7 +10,7 @@ use iced::{
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Message {
     Move(f32),
-    Hold,
+    Press,
     Release,
     Seeked,
 }
@@ -18,7 +18,8 @@ pub enum Message {
 #[derive(Default)]
 pub struct Progress {
     duration: f32,
-    cursor_offset: f32,
+    offset: f32,
+    cursor_pos: f32,
     cursor_holding: bool,
     seeking: bool,
 }
@@ -36,15 +37,19 @@ impl Progress {
         }
     }
 
-    pub fn update(&mut self, msg: Message) -> Task<Message> {
+    pub fn update(&mut self, msg: Message, is_playing: bool) -> Task<Message> {
         match msg {
             Message::Move(v) => {
-                self.cursor_offset = v;
+                self.cursor_pos = v;
+                if self.cursor_holding {
+                    self.offset = self.cursor_pos;
+                }
                 None
             }
-            Message::Hold => {
+            Message::Press => {
                 self.cursor_holding = true;
                 self.seeking = true;
+                self.offset = self.cursor_pos;
                 None
             }
             Message::Release => {
@@ -56,8 +61,8 @@ impl Progress {
                 ))
             }
             Message::Seeked => {
-                if !self.cursor_holding {
-                    self.seeking = false;
+                if !self.cursor_holding && is_playing {
+                    self.stop_seeking();
                 }
                 None
             }
@@ -67,7 +72,7 @@ impl Progress {
 
     pub fn view(&self, track_position: f32) -> Element<'_, Message> {
         let value = if self.seeking {
-            self.cursor_offset
+            self.offset
         } else {
             track_position
         };
@@ -79,12 +84,16 @@ impl Progress {
         )
         .interaction(Interaction::Pointer)
         .on_move(move |p| Message::Move(p.x * self.duration / Self::LENGTH as f32))
-        .on_press(Message::Hold)
+        .on_press(Message::Press)
         .on_release(Message::Release)
         .into()
     }
 
     pub fn offset(&self) -> f64 {
-        self.cursor_offset as f64
+        self.offset as f64
+    }
+
+    pub fn stop_seeking(&mut self) {
+        self.seeking = false;
     }
 }

@@ -42,6 +42,10 @@ impl PlayPause {
         button(svg).on_press(self.message()).style(self.style()).into()
     }
 
+    pub fn is_playing(&self) -> bool {
+        self.is_playing
+    }
+
     fn message(&self) -> Message {
         if self.is_playing {
             Message::Pause

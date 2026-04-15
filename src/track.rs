@@ -31,10 +31,15 @@ pub struct Track {
 }
 
 impl Track {
-    const PLAY_PAUSE_TWEEN: Tween = Tween {
+    const TWEEN_DEFAULT: Tween = Tween {
         start_time: StartTime::Immediate,
         duration: Duration::from_secs(1),
         easing: Easing::InPowi(2),
+    };
+    const TWEEN_INSTANT: Tween = Tween {
+        start_time: StartTime::Immediate,
+        duration: Duration::from_millis(0),
+        easing: Easing::Linear,
     };
 
     pub fn new(path: PathBuf) -> Result<Self> {
@@ -63,8 +68,13 @@ impl Track {
         match msg {
             Message::PlayPause(m) => {
                 match m {
-                    play_pause::Message::Play => self.play(),
-                    play_pause::Message::Pause => self.pause(),
+                    play_pause::Message::Play => {
+                        self.play();
+                        self.progress.stop_seeking();
+                    }
+                    play_pause::Message::Pause => {
+                        self.pause();
+                    }
                 }
                 self.play_pause.update(m);
                 None
@@ -74,12 +84,18 @@ impl Track {
                     if let Some(handle) = &mut self.handle {
                         handle.seek_to(self.progress.offset());
                     } else {
-                        self.start_track(Some(self.progress.offset()))
+                        let handle = self
+                            .create_track(Some(self.progress.offset()))
                             .expect("should be able to start track");
+                        handle.pause(Self::TWEEN_INSTANT);
                     }
                 }
 
-                Some(self.progress.update(m).map(Message::Progress))
+                Some(
+                    self.progress
+                        .update(m, self.play_pause.is_playing())
+                        .map(Message::Progress),
+                )
             }
         }
         .unwrap_or_else(Task::none)
@@ -98,24 +114,24 @@ impl Track {
 
     fn play(&mut self) {
         if let Some(handle) = &mut self.handle {
-            handle.resume(Self::PLAY_PAUSE_TWEEN);
+            handle.resume(Self::TWEEN_DEFAULT);
         } else {
-            self.start_track(None)
+            self.create_track(None)
                 .expect("should be able to start track");
         }
     }
 
     fn pause(&mut self) {
         if let Some(handle) = &mut self.handle {
-            handle.pause(Self::PLAY_PAUSE_TWEEN);
+            handle.pause(Self::TWEEN_DEFAULT);
         }
     }
 
-    fn start_track(&mut self, offset: Option<f64>) -> Result<()> {
+    fn create_track(&mut self, offset: Option<f64>) -> Result<&mut StaticSoundHandle> {
         let mut handle = self.manager.play(self.data.clone())?;
         handle.seek_to(offset.unwrap_or(0.0));
         self.handle.replace(handle);
-        Ok(())
+        Ok(self.handle.as_mut().unwrap())
     }
 
     fn track_position(&self) -> f32 {
