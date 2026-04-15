@@ -7,10 +7,16 @@ use iced::{
 };
 use kira::{
     AudioManager, AudioManagerSettings, Easing, StartTime, Tween,
-    sound::static_sound::{StaticSoundData, StaticSoundHandle},
+    sound::{
+        PlaybackState,
+        static_sound::{StaticSoundData, StaticSoundHandle},
+    },
 };
 
-use crate::{components::Toggle, track::{looping::Loop, play_pause::PlayPause, progress::Progress}};
+use crate::{
+    components::Toggle,
+    track::{looping::Loop, play_pause::PlayPause, progress::Progress},
+};
 
 mod looping;
 mod play_pause;
@@ -132,7 +138,10 @@ impl Track {
     }
 
     fn play(&mut self) {
-        if let Some(handle) = &mut self.handle {
+        if let Some(handle) = &mut self.handle
+            && handle.state() != PlaybackState::Stopping
+            && handle.state() != PlaybackState::Stopped
+        {
             handle.resume(Self::TWEEN_DEFAULT);
         } else {
             self.create_track(None)
