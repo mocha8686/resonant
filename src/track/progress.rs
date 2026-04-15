@@ -26,7 +26,7 @@ pub struct Progress {
 
 impl Progress {
     const LENGTH: u32 = 200;
-    const DEBOUNCE_INTERVAL: u64 = 15;
+    const DEBOUNCE_INTERVAL: u64 = 500;
     const GIRTH: u32 = 8;
 
     #[must_use]

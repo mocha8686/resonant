@@ -8,8 +8,8 @@ use iced::{
 use kira::{
     AudioManager, AudioManagerSettings, Decibels, Easing, StartTime, Tween, Tweenable,
     sound::{
-        PlaybackState,
-        static_sound::{StaticSoundData, StaticSoundHandle},
+        PlaybackPosition, PlaybackState, Region,
+        streaming::{StreamingSoundData, StreamingSoundHandle},
     },
 };
 
@@ -32,17 +32,25 @@ pub enum Message {
     Remove,
 }
 
+type FileStreamingSoundData = StreamingSoundData<kira::sound::FromFileError>;
+type FileStreamingSoundHandle = StreamingSoundHandle<kira::sound::FromFileError>;
+
 pub struct Track {
     id: Id,
     name: String,
-    data: StaticSoundData,
+    path: PathBuf,
     position: Vector2,
     radius: f32,
     manager: AudioManager,
-    handle: Option<StaticSoundHandle>,
+    handle: Handle,
     play_pause: PlayPause,
     progress: Progress,
     looping: Loop,
+}
+
+enum Handle {
+    Uninitialized(Option<FileStreamingSoundData>),
+    Initialized(FileStreamingSoundHandle),
 }
 
 impl Track {
@@ -66,18 +74,18 @@ impl Track {
             .unwrap_or("Unknown filename")
             .to_string();
 
-        let data = StaticSoundData::from_file(path)?;
         let manager = AudioManager::new(AudioManagerSettings::default())?;
+        let data = FileStreamingSoundData::from_file(&path)?;
         let duration = data.unsliced_duration().as_secs_f32();
 
         Ok(Self {
             id: Id::unique(),
             name,
-            data,
+            path,
             position: Vector2::default(),
             radius: 500.0,
             manager,
-            handle: None,
+            handle: Handle::Uninitialized(Some(data)),
             progress: Progress::new(duration),
             play_pause: PlayPause::new(),
             looping: Loop::new(),
@@ -89,7 +97,7 @@ impl Track {
             Message::PlayPause(m) => {
                 match m {
                     play_pause::Message::Press(true) => {
-                        self.play();
+                        self.play().expect("should be able to play");
                         self.progress.stop_seeking();
                     }
                     play_pause::Message::Press(false) => {
@@ -101,13 +109,10 @@ impl Track {
             }
             Message::Progress(m) => {
                 if m == progress::Message::Release {
-                    if let Some(handle) = &mut self.handle {
+                    if let Handle::Initialized(handle) = &mut self.handle {
                         handle.seek_to(self.progress.offset());
                     } else {
-                        let handle = self
-                            .create_track(Some(self.progress.offset()))
-                            .expect("should be able to start track");
-                        handle.pause(Self::TWEEN_INSTANT);
+                        self.create_track().expect("should be able to start track");
                     }
                 }
 
@@ -118,35 +123,46 @@ impl Track {
                 )
             }
             Message::Loop(m) => {
-                if let Some(handle) = &mut self.handle {
-                    match m {
-                        looping::Message::Press(true) => {
-                            handle.set_loop_region(0.0..);
-                        }
-                        looping::Message::Press(false) => {
-                            handle.set_loop_region(None);
+                let loop_region: Option<Region> = match m {
+                    looping::Message::Press(true) => Some((0.0..).into()),
+                    looping::Message::Press(false) => None,
+                };
+
+                match &mut self.handle {
+                    Handle::Initialized(handle) => {
+                        handle.set_loop_region(loop_region);
+                    }
+                    Handle::Uninitialized(data) => {
+                        if let Some(data) = data {
+                            data.settings.loop_region = loop_region;
                         }
                     }
                 }
+
                 self.looping.update(m);
                 None
             }
             Message::ListenerMoved(new_position) => {
-                if let Some(handle) = &mut self.handle {
-                    let t = 1.0 - (new_position - self.position).magnitude() / self.radius;
-                    let t_log = (t as f64 * (Self::ATTENUATION_STRENGTH - 1.0) + 1.0)
-                        .log(Self::ATTENUATION_STRENGTH);
+                let t = 1.0 - (new_position - self.position).magnitude() / self.radius;
+                let t_log = (t as f64 * (Self::ATTENUATION_STRENGTH - 1.0) + 1.0)
+                    .log(Self::ATTENUATION_STRENGTH);
+                let volume = Decibels::interpolate(Decibels::SILENCE, Decibels::IDENTITY, t_log);
 
-                    handle.set_volume(
-                        Decibels::interpolate(Decibels::SILENCE, Decibels::IDENTITY, t_log),
-                        Self::TWEEN_INSTANT,
-                    );
+                match &mut self.handle {
+                    Handle::Initialized(handle) => {
+                        handle.set_volume(volume, Self::TWEEN_INSTANT);
+                    }
+                    Handle::Uninitialized(data) => {
+                        if let Some(data) = data {
+                            data.settings.volume = volume.into();
+                        }
+                    }
                 }
                 None
             }
             Message::Remove => None,
         }
-        .unwrap_or_else(Task::none)
+        .unwrap_or(Task::none())
     }
 
     pub fn view(&self) -> Element<'_, Message> {
@@ -162,38 +178,72 @@ impl Track {
         .into()
     }
 
-    fn play(&mut self) {
-        if let Some(handle) = &mut self.handle
-            && handle.state() != PlaybackState::Stopping
-            && handle.state() != PlaybackState::Stopped
-        {
-            handle.resume(Self::TWEEN_DEFAULT);
-        } else {
-            self.create_track(None)
-                .expect("should be able to start track");
-        }
+    fn play(&mut self) -> Result<()> {
+        let data = match &mut self.handle {
+            Handle::Initialized(handle)
+                if handle.state() != PlaybackState::Stopping
+                    && handle.state() != PlaybackState::Stopped =>
+            {
+                handle.resume(Self::TWEEN_DEFAULT);
+                return Ok(());
+            }
+            Handle::Initialized(_) => {
+                self.create_track()?;
+                let Handle::Uninitialized(data) = &mut self.handle else {
+                    unreachable!()
+                };
+                data.take().unwrap()
+            }
+            Handle::Uninitialized(data) => data.take().map_or_else(
+                || {
+                    self.create_track()?;
+                    let Handle::Uninitialized(data) = &mut self.handle else {
+                        unreachable!()
+                    };
+                    Ok(data.take().unwrap())
+                },
+                anyhow::Result::<FileStreamingSoundData>::Ok,
+            )?,
+        };
+
+        let handle = self.manager.play(data)?;
+        self.handle = Handle::Initialized(handle);
+        Ok(())
     }
 
     fn pause(&mut self) {
-        if let Some(handle) = &mut self.handle {
+        if let Handle::Initialized(handle) = &mut self.handle {
             handle.pause(Self::TWEEN_DEFAULT);
         }
     }
 
-    fn create_track(&mut self, offset: Option<f64>) -> Result<&mut StaticSoundHandle> {
-        let mut handle = self.manager.play(self.data.clone())?;
-        handle.seek_to(offset.unwrap_or(0.0));
+    fn create_track(&mut self) -> Result<&mut FileStreamingSoundData> {
+        let loop_region = if self.looping.is_on() {
+            Some(Region::from(0.0..))
+        } else {
+            None
+        };
 
-        if self.looping.is_on() {
-            handle.set_loop_region(0.0..);
-        }
+        let data = FileStreamingSoundData::from_file(&self.path)?
+            .loop_region(loop_region)
+            .start_position(self.progress.offset());
+        self.handle = Handle::Uninitialized(Some(data));
 
-        self.handle.replace(handle);
-        Ok(self.handle.as_mut().unwrap())
+        let Handle::Uninitialized(Some(data)) = &mut self.handle else {
+            unreachable!()
+        };
+        Ok(data)
     }
 
     fn track_position(&self) -> f32 {
-        self.handle.as_ref().map_or(0.0, |h| h.position() as f32)
+        match &self.handle {
+            Handle::Uninitialized(Some(data)) => match data.settings.start_position {
+                PlaybackPosition::Seconds(time) => time as f32,
+                PlaybackPosition::Samples(_) => 0.0,
+            },
+            Handle::Initialized(handle) => handle.position() as f32,
+            Handle::Uninitialized(_) => 0.0,
+        }
     }
 
     pub fn id(&self) -> Id {
