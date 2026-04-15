@@ -5,10 +5,7 @@ use iced::{
     Length::Fill,
     Rectangle, Renderer, Subscription, Task, Theme, Vector, keyboard,
     mouse::{self, Cursor},
-    widget::{
-        Action,
-        canvas::{self, Frame, Geometry, Path, Program, Stroke},
-    },
+    widget::{Action, canvas},
     window,
 };
 
@@ -156,16 +153,7 @@ impl Soundscape {
 
     #[must_use]
     pub fn view(&self) -> Element<'_, Message> {
-        let canvas = iced::widget::canvas(self).width(Fill).height(Fill);
-        // let debug = container(text!(
-        //     "vel: ({}, {})",
-        //     self.listener.velocity.x,
-        //     self.listener.velocity.y
-        // ))
-        // .align_bottom(Fill);
-
-        canvas.into()
-        // stack![debug, canvas].width(Fill).height(Fill).into()
+        canvas(self).width(Fill).height(Fill).into()
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
@@ -206,7 +194,7 @@ impl Soundscape {
     }
 
     #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
-    fn draw_grid(&self, frame: &mut Frame, theme: &Theme, bounds: Rectangle) {
+    fn draw_grid(&self, frame: &mut canvas::Frame, theme: &Theme, bounds: Rectangle) {
         let spacing = Self::SPACING * self.scale;
 
         let n_min = (Self::MIN_SPACING_WIDTH / spacing).log2().ceil() as i32;
@@ -224,7 +212,7 @@ impl Soundscape {
     )]
     fn draw_gridlines(
         &self,
-        frame: &mut Frame,
+        frame: &mut canvas::Frame,
         n: i32,
         bounds: Rectangle,
         direction: Direction,
@@ -243,8 +231,8 @@ impl Soundscape {
         for i in 0..amount {
             let c = i as f32 * spacing + offset;
             let path = match direction {
-                Direction::Vertical => Path::line((c, 0.0).into(), (c, cross_length).into()),
-                Direction::Horizontal => Path::line((0.0, c).into(), (cross_length, c).into()),
+                Direction::Vertical => canvas::Path::line((c, 0.0).into(), (c, cross_length).into()),
+                Direction::Horizontal => canvas::Path::line((0.0, c).into(), (cross_length, c).into()),
             };
 
             let top_left = self.screen_to_world(Vector2::new(0.0, 0.0), bounds.center().into());
@@ -262,7 +250,7 @@ impl Soundscape {
                 Self::GRID_ALPHA_NORMAL
             };
 
-            let stroke = Stroke::default()
+            let stroke = canvas::Stroke::default()
                 .with_width(Self::GRID_STROKE_WIDTH)
                 .with_color(theme.palette().text.scale_alpha(alpha));
 
@@ -298,7 +286,7 @@ impl Default for Soundscape {
     }
 }
 
-impl Program<Message> for Soundscape {
+impl canvas::Program<Message> for Soundscape {
     type State = State;
 
     fn draw(
@@ -308,19 +296,19 @@ impl Program<Message> for Soundscape {
         theme: &Theme,
         bounds: Rectangle,
         _cursor: Cursor,
-    ) -> Vec<Geometry<Renderer>> {
-        let mut frame = Frame::new(renderer, bounds.size());
+    ) -> Vec<canvas::Geometry<Renderer>> {
+        let mut frame = canvas::Frame::new(renderer, bounds.size());
         let center_origin_transform = Vector::new(bounds.width, bounds.height) / 2.0;
         frame.translate(center_origin_transform);
         frame.scale(self.scale);
         frame.translate(self.camera.into());
 
         for point in &self.waypoints {
-            let path = Path::circle(point.into(), Self::WAYPOINT_RADIUS);
+            let path = canvas::Path::circle(point.into(), Self::WAYPOINT_RADIUS);
             frame.fill(&path, theme.palette().text);
         }
 
-        let path = Path::new(|p| {
+        let path = canvas::Path::new(|p| {
             p.move_to(self.listener.position.into());
             for point in &self.waypoints {
                 p.line_to(point.into());
@@ -328,24 +316,32 @@ impl Program<Message> for Soundscape {
         });
         frame.stroke(
             &path,
-            Stroke::default()
+            canvas::Stroke::default()
                 .with_width(1.0)
                 .with_color(theme.palette().text.scale_alpha(0.8)),
         );
 
-        let path = Path::circle(
+        let path = canvas::Path::circle(
             (self.listener.position.x, self.listener.position.y).into(),
             Self::LISTENER_RADIUS,
         );
         frame.fill(&path, theme.palette().primary);
 
         for track in &self.tracks {
-            let path = Path::circle(track.position.into(), track.radius);
-            frame.fill(&path, theme.extended_palette().primary.weak.color.scale_alpha(0.3));
-            frame.stroke(&path, Stroke::default().with_width(2.0).with_color(theme.extended_palette().primary.strong.color));
+            let path = canvas::Path::circle(track.position.into(), track.radius);
+            frame.fill(
+                &path,
+                theme.extended_palette().primary.weak.color.scale_alpha(0.3),
+            );
+            frame.stroke(
+                &path,
+                canvas::Stroke::default()
+                    .with_width(2.0)
+                    .with_color(theme.extended_palette().primary.strong.color),
+            );
         }
 
-        let mut grid_frame = Frame::new(renderer, bounds.size());
+        let mut grid_frame = canvas::Frame::new(renderer, bounds.size());
         self.draw_grid(&mut grid_frame, theme, bounds);
 
         vec![grid_frame.into_geometry(), frame.into_geometry()]
