@@ -10,7 +10,7 @@ use kira::{
     sound::static_sound::{StaticSoundData, StaticSoundHandle},
 };
 
-use crate::track::{looping::Loop, play_pause::PlayPause, progress::Progress};
+use crate::{components::Toggle, track::{looping::Loop, play_pause::PlayPause, progress::Progress}};
 
 mod looping;
 mod play_pause;
@@ -72,11 +72,11 @@ impl Track {
         match msg {
             Message::PlayPause(m) => {
                 match m {
-                    play_pause::Message::Play => {
+                    play_pause::Message::Press(true) => {
                         self.play();
                         self.progress.stop_seeking();
                     }
-                    play_pause::Message::Pause => {
+                    play_pause::Message::Press(false) => {
                         self.pause();
                     }
                 }
@@ -97,17 +97,17 @@ impl Track {
 
                 Some(
                     self.progress
-                        .update(m, self.play_pause.is_playing())
+                        .update(m, self.play_pause.is_on())
                         .map(Message::Progress),
                 )
             }
             Message::Loop(m) => {
                 if let Some(handle) = &mut self.handle {
                     match m {
-                        looping::Message::Loop => {
+                        looping::Message::Press(true) => {
                             handle.set_loop_region(0.0..);
                         }
-                        looping::Message::Unloop => {
+                        looping::Message::Press(false) => {
                             handle.set_loop_region(None);
                         }
                     }
@@ -150,7 +150,7 @@ impl Track {
         let mut handle = self.manager.play(self.data.clone())?;
         handle.seek_to(offset.unwrap_or(0.0));
 
-        if self.looping.is_looping() {
+        if self.looping.is_on() {
             handle.set_loop_region(0.0..);
         }
 

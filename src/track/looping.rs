@@ -1,13 +1,8 @@
-use iced::{Element, widget::button};
-
-use crate::components::Icon;
-
-type ButtonStyler = fn(&iced::Theme, button::Status) -> button::Style;
+use crate::components::Toggle;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Message {
-    Loop,
-    Unloop,
+    Press(bool),
 }
 
 #[derive(Default)]
@@ -23,42 +18,21 @@ impl Loop {
 
     pub fn update(&mut self, msg: Message) {
         match msg {
-            Message::Loop => {
-                self.is_looping = true;
-            }
-            Message::Unloop => {
-                self.is_looping = false;
+            Message::Press(is_looping) => {
+                self.is_looping = is_looping;
             }
         }
     }
+}
 
-    pub fn view(&self) -> Element<'_, Message> {
-        let data = include_bytes!("../icons/loop.svg").as_slice();
-        let icon = Icon::new(data);
+impl Toggle<'_, Message> for Loop {
+    const TOGGLE_MESSAGE: fn(bool) -> Message = Message::Press;
 
-        button(icon.view())
-            .on_press(self.message())
-            .style(self.style())
-            .into()
-    }
-
-    pub fn is_looping(&self) -> bool {
+    fn is_on(&self) -> bool {
         self.is_looping
     }
 
-    fn message(&self) -> Message {
-        if self.is_looping {
-            Message::Unloop
-        } else {
-            Message::Loop
-        }
-    }
-
-    fn style(&self) -> ButtonStyler {
-        if self.is_looping {
-            button::primary
-        } else {
-            button::background
-        }
+    fn icon(&self, _is_on: bool) -> &'static [u8] {
+        include_bytes!("../icons/loop.svg").as_slice()
     }
 }
