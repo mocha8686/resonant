@@ -10,6 +10,8 @@
 pub(crate) mod components;
 pub mod soundscape;
 pub mod track;
+mod id;
 mod vector;
 
+pub use id::Id;
 pub use vector::Vector2;

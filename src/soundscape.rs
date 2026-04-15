@@ -1,4 +1,4 @@
-use std::{cmp::max_by_key, collections::VecDeque, time::Instant};
+use std::{cmp::max_by_key, collections::{HashMap, VecDeque}, time::Instant};
 
 use iced::{
     Element, Event,
@@ -9,7 +9,7 @@ use iced::{
     window,
 };
 
-use crate::Vector2;
+use crate::{Id, Vector2, track::Track};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Message {
@@ -24,9 +24,21 @@ pub enum Message {
     NewWaypoint(Vector2),
     ListenerMoved(Vector2),
     NewTrack {
+        id: Id,
         position: Vector2,
         radius: f32,
     },
+    TrackRemoved(Id),
+}
+
+impl From<&Track> for Message {
+    fn from(track: &Track) -> Self {
+        Self::NewTrack {
+            id: track.id(),
+            position: track.position(),
+            radius: track.radius(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -39,8 +51,9 @@ pub enum State {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 struct TrackInfo {
+    id: Id,
     position: Vector2,
     radius: f32,
 }
@@ -48,7 +61,7 @@ struct TrackInfo {
 #[derive(Debug, Clone)]
 pub struct Soundscape {
     listener: Listener,
-    tracks: Vec<TrackInfo>,
+    tracks: HashMap<Id, TrackInfo>,
     camera: Vector2,
     scale: f32,
     current: Instant,
@@ -86,7 +99,7 @@ impl Soundscape {
     pub fn new() -> Self {
         Self {
             listener: Listener::default(),
-            tracks: Vec::new(),
+            tracks: HashMap::new(),
             camera: Vector2::ZERO,
             scale: 1.0,
             current: Instant::now(),
@@ -143,8 +156,20 @@ impl Soundscape {
                 None
             }
             Message::ListenerMoved(_) => None,
-            Message::NewTrack { position, radius } => {
-                self.tracks.push(TrackInfo { position, radius });
+            Message::NewTrack {
+                id,
+                position,
+                radius,
+            } => {
+                self.tracks.insert(id, TrackInfo {
+                    id,
+                    position,
+                    radius,
+                });
+                None
+            }
+            Message::TrackRemoved(id )=> {
+                self.tracks.remove(&id);
                 None
             }
         }
@@ -231,8 +256,12 @@ impl Soundscape {
         for i in 0..amount {
             let c = i as f32 * spacing + offset;
             let path = match direction {
-                Direction::Vertical => canvas::Path::line((c, 0.0).into(), (c, cross_length).into()),
-                Direction::Horizontal => canvas::Path::line((0.0, c).into(), (cross_length, c).into()),
+                Direction::Vertical => {
+                    canvas::Path::line((c, 0.0).into(), (c, cross_length).into())
+                }
+                Direction::Horizontal => {
+                    canvas::Path::line((0.0, c).into(), (cross_length, c).into())
+                }
             };
 
             let top_left = self.screen_to_world(Vector2::new(0.0, 0.0), bounds.center().into());
@@ -327,7 +356,7 @@ impl canvas::Program<Message> for Soundscape {
         );
         frame.fill(&path, theme.palette().primary);
 
-        for track in &self.tracks {
+        for track in self.tracks.values() {
             let path = canvas::Path::circle(track.position.into(), track.radius);
             frame.fill(
                 &path,

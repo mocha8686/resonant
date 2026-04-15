@@ -1,8 +1,11 @@
+use std::collections::HashMap;
+
 use iced::{
     Element, Subscription, Task,
-    widget::{button, column, container, row, stack, text},
+    widget::{button, column, container, stack, text},
 };
 use resonant::{
+    Id,
     soundscape::{self, Soundscape},
     track::{self, Track},
 };
@@ -10,21 +13,20 @@ use rfd::FileDialog;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum MainMessage {
-    Track(track::Message, usize),
+    Track(track::Message, Id),
     Soundscape(soundscape::Message),
     AddTrack,
-    RemoveTrack,
 }
 
 struct State {
-    tracks: Vec<Track>,
+    tracks: HashMap<Id, Track>,
     soundscape: Soundscape,
 }
 
 impl Default for State {
     fn default() -> Self {
         Self {
-            tracks: Vec::new(),
+            tracks: HashMap::new(),
             soundscape: Soundscape::new(),
         }
     }
@@ -33,18 +35,29 @@ impl Default for State {
 impl State {
     fn update(&mut self, msg: MainMessage) -> Task<MainMessage> {
         match msg {
-            MainMessage::Track(msg, index) => {
-                let Some(track) = self.tracks.get_mut(index) else {
-                    return Task::none();
-                };
-                Some(track.update(msg).map(move |m| MainMessage::Track(m, index)))
+            MainMessage::Track(msg, id) => {
+                if let Some(track) = self.tracks.get_mut(&id) {
+                    if msg == track::Message::Remove {
+                        self.tracks.remove(&id);
+                        Some(
+                            self.soundscape
+                                .update(soundscape::Message::TrackRemoved(id))
+                                .map(MainMessage::Soundscape),
+                        )
+                    } else {
+                        Some(track.update(msg).map(move |m| MainMessage::Track(m, id)))
+                    }
+                } else {
+                    None
+                }
             }
             MainMessage::Soundscape(msg) => {
                 let task = match msg {
                     soundscape::Message::ListenerMoved(new_position) => {
-                        let tasks = self.tracks.iter_mut().enumerate().map(|(i, t)| {
+                        let tasks = self.tracks.values_mut().map(|t| {
+                            let id = t.id();
                             t.update(track::Message::ListenerMoved(new_position))
-                                .map(move |m| MainMessage::Track(m, i))
+                                .map(move |m| MainMessage::Track(m, id))
                         });
                         Task::batch(tasks)
                     }
@@ -60,41 +73,33 @@ impl State {
                     .pick_file()
                 {
                     let track = Track::new(path).expect("should be able to create track");
-                    let task = self.soundscape.update(soundscape::Message::NewTrack {
-                        position: track.position(),
-                        radius: track.radius(),
-                    }).map(MainMessage::Soundscape);
-                    self.tracks.push(track);
+                    let task = self
+                        .soundscape
+                        .update((&track).into())
+                        .map(MainMessage::Soundscape);
+                    self.tracks.insert(track.id(), track);
 
                     Some(task)
                 } else {
                     None
                 }
             }
-            MainMessage::RemoveTrack => {
-                self.tracks.pop();
-                None
-            }
         }
         .unwrap_or_else(Task::none)
     }
 
     fn view(&self) -> Element<'_, MainMessage> {
-        let tracks = column(
-            self.tracks
-                .iter()
-                .enumerate()
-                .map(|(index, track)| track.view().map(move |msg| MainMessage::Track(msg, index))),
-        );
+        let tracks = column(self.tracks.values().map(|track| {
+            track
+                .view()
+                .map(move |msg| MainMessage::Track(msg, track.id()))
+        }));
 
         let track_menu = container(
             column![
                 text("Tracklist"),
                 tracks,
-                row![
-                    button("+").on_press(MainMessage::AddTrack),
-                    button("-").on_press(MainMessage::RemoveTrack),
-                ],
+                button("+").on_press(MainMessage::AddTrack),
             ]
             .spacing(16),
         )

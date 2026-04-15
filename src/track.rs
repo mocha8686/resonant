@@ -3,7 +3,7 @@ use std::{path::PathBuf, time::Duration};
 use anyhow::Result;
 use iced::{
     Element, Task,
-    widget::{column, text},
+    widget::{button, column, text},
 };
 use kira::{
     AudioManager, AudioManagerSettings, Decibels, Easing, StartTime, Tween, Tweenable,
@@ -14,7 +14,7 @@ use kira::{
 };
 
 use crate::{
-    Vector2,
+    Id, Vector2,
     components::Toggle,
     track::{looping::Loop, play_pause::PlayPause, progress::Progress},
 };
@@ -29,9 +29,11 @@ pub enum Message {
     Progress(progress::Message),
     Loop(looping::Message),
     ListenerMoved(Vector2),
+    Remove,
 }
 
 pub struct Track {
+    id: Id,
     name: String,
     data: StaticSoundData,
     position: Vector2,
@@ -69,6 +71,7 @@ impl Track {
         let duration = data.unsliced_duration().as_secs_f32();
 
         Ok(Self {
+            id: Id::unique(),
             name,
             data,
             position: Vector2::default(),
@@ -131,7 +134,8 @@ impl Track {
             Message::ListenerMoved(new_position) => {
                 if let Some(handle) = &mut self.handle {
                     let t = 1.0 - (new_position - self.position).magnitude() / self.radius;
-                    let t_log = (t as f64 * (Self::ATTENUATION_STRENGTH - 1.0) + 1.0).log(Self::ATTENUATION_STRENGTH);
+                    let t_log = (t as f64 * (Self::ATTENUATION_STRENGTH - 1.0) + 1.0)
+                        .log(Self::ATTENUATION_STRENGTH);
 
                     handle.set_volume(
                         Decibels::interpolate(Decibels::SILENCE, Decibels::IDENTITY, t_log),
@@ -140,6 +144,7 @@ impl Track {
                 }
                 None
             }
+            Message::Remove => None,
         }
         .unwrap_or_else(Task::none)
     }
@@ -152,6 +157,7 @@ impl Track {
                 .map(Message::Progress),
             self.play_pause.view().map(Message::PlayPause),
             self.looping.view().map(Message::Loop),
+            button("-").on_press(Message::Remove),
         ]
         .into()
     }
@@ -188,6 +194,10 @@ impl Track {
 
     fn track_position(&self) -> f32 {
         self.handle.as_ref().map_or(0.0, |h| h.position() as f32)
+    }
+
+    pub fn id(&self) -> Id {
+        self.id
     }
 
     pub fn position(&self) -> Vector2 {
