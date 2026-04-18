@@ -8,10 +8,10 @@
 )]
 
 pub(crate) mod components;
+mod id;
 pub mod soundscape;
 pub mod track;
-mod id;
 mod vector;
 
-pub use id::Id;
+pub use id::{Id, IdGenerator};
 pub use vector::Vector2;

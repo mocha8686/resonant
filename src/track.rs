@@ -66,7 +66,7 @@ impl Track {
     };
     const ATTENUATION_STRENGTH: f64 = 10.0;
 
-    pub fn new(path: PathBuf) -> Result<Self> {
+    pub fn new(id: Id, path: PathBuf) -> Result<Self> {
         let name = path
             .with_extension("")
             .file_name()
@@ -79,7 +79,7 @@ impl Track {
         let duration = data.unsliced_duration().as_secs_f32();
 
         Ok(Self {
-            id: Id::unique(),
+            id,
             name,
             path,
             position: Vector2::default(),
