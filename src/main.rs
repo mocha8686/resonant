@@ -1,9 +1,8 @@
-use std::collections::HashMap;
-
 use iced::{
     Element, Subscription, Task,
     widget::{button, column, container, stack, text},
 };
+use ordermap::OrderMap;
 use resonant::{
     soundscape::{self, Soundscape},
     track::{self, Track},
@@ -19,14 +18,14 @@ enum MainMessage {
 }
 
 struct State {
-    tracks: HashMap<Ulid, Track>,
+    tracks: OrderMap<Ulid, Track>,
     soundscape: Soundscape,
 }
 
 impl Default for State {
     fn default() -> Self {
         Self {
-            tracks: HashMap::new(),
+            tracks: OrderMap::new(),
             soundscape: Soundscape::new(),
         }
     }
