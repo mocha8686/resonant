@@ -71,8 +71,8 @@ impl State {
                     .add_filter("audio", &["flac", "mp3", "ogg", "wav", "webm"])
                     .pick_file()
                 {
-                    let track = Track::new(Ulid::new(), path)
-                        .expect("should be able to create track");
+                    let track =
+                        Track::new(Ulid::new(), path).expect("should be able to create track");
                     let task = self
                         .soundscape
                         .update((&track).into())

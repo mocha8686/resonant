@@ -1,4 +1,8 @@
-use std::{cmp::max_by_key, collections::{HashMap, VecDeque}, time::Instant};
+use std::{
+    cmp::max_by_key,
+    collections::{HashMap, VecDeque},
+    time::Instant,
+};
 
 use iced::{
     Element, Event,
@@ -162,14 +166,17 @@ impl Soundscape {
                 position,
                 radius,
             } => {
-                self.tracks.insert(id, TrackInfo {
+                self.tracks.insert(
                     id,
-                    position,
-                    radius,
-                });
+                    TrackInfo {
+                        id,
+                        position,
+                        radius,
+                    },
+                );
                 None
             }
-            Message::TrackRemoved(id )=> {
+            Message::TrackRemoved(id) => {
                 self.tracks.remove(&id);
                 None
             }
