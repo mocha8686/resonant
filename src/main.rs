@@ -1,3 +1,4 @@
+use directories::ProjectDirs;
 use iced::{
     Element, Subscription, Task,
     widget::{button, column, container, stack, text},
@@ -20,13 +21,18 @@ enum MainMessage {
 struct State {
     tracks: OrderMap<Ulid, Track>,
     soundscape: Soundscape,
+    directories: ProjectDirs,
 }
 
 impl Default for State {
     fn default() -> Self {
+        let directories = ProjectDirs::from("com.github", "mocha8686", env!("CARGO_PKG_NAME"))
+            .expect("current user should have a home directory");
+
         Self {
             tracks: OrderMap::new(),
             soundscape: Soundscape::new(),
+            directories,
         }
     }
 }
@@ -72,7 +78,7 @@ impl State {
                     .pick_file()
                 {
                     let track =
-                        Track::new(Ulid::new(), path).expect("should be able to create track");
+                        Track::new(Ulid::new(), &path, self.directories.cache_dir()).expect("should be able to create track");
                     let task = self
                         .soundscape
                         .update((&track).into())

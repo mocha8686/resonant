@@ -1,4 +1,7 @@
-use std::{path::PathBuf, time::Duration};
+use std::{
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 use anyhow::Result;
 use iced::{
@@ -66,8 +69,8 @@ impl Track {
     };
     const ATTENUATION_STRENGTH: f64 = 10.0;
 
-    pub fn new(id: Ulid, path: PathBuf) -> Result<Self> {
-        let name = path
+    pub fn new(id: Ulid, original_path: &Path, cache_dir: &Path) -> Result<Self> {
+        let name = original_path
             .with_extension("")
             .file_name()
             .and_then(|s| s.to_str())
@@ -75,13 +78,22 @@ impl Track {
             .to_string();
 
         let manager = AudioManager::new(AudioManagerSettings::default())?;
-        let data = FileStreamingSoundData::from_file(&path)?;
+
+        std::fs::create_dir_all(cache_dir)?;
+        let cache_dest = cache_dir.join(id.to_string()).with_extension(
+            original_path
+                .extension()
+                .expect("file should have extension"),
+        );
+        std::fs::copy(original_path, &cache_dest)?;
+
+        let data = FileStreamingSoundData::from_file(&cache_dest)?;
         let duration = data.unsliced_duration().as_secs_f32();
 
         Ok(Self {
             id,
             name,
-            path,
+            path: cache_dest,
             position: Vector2::default(),
             radius: 500.0,
             manager,
@@ -256,5 +268,11 @@ impl Track {
 
     pub fn radius(&self) -> f32 {
         self.radius
+    }
+}
+
+impl Drop for Track {
+    fn drop(&mut self) {
+        std::fs::remove_file(&self.path).ok();
     }
 }
