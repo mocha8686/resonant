@@ -14,11 +14,10 @@ use kira::{
 };
 use ulid::Ulid;
 
-use crate::{
-    Vector2,
-    components::Toggle,
-    track::{looping::Loop, play_pause::PlayPause, progress::Progress},
-};
+use crate::{Vector2, components::Toggle};
+use looping::Loop;
+use play_pause::PlayPause;
+use progress::Progress;
 
 mod looping;
 mod play_pause;
