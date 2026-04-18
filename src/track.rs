@@ -12,9 +12,10 @@ use kira::{
         streaming::{StreamingSoundData, StreamingSoundHandle},
     },
 };
+use ulid::Ulid;
 
 use crate::{
-    Id, Vector2,
+    Vector2,
     components::Toggle,
     track::{looping::Loop, play_pause::PlayPause, progress::Progress},
 };
@@ -36,7 +37,7 @@ type FileStreamingSoundData = StreamingSoundData<kira::sound::FromFileError>;
 type FileStreamingSoundHandle = StreamingSoundHandle<kira::sound::FromFileError>;
 
 pub struct Track {
-    id: Id,
+    id: Ulid,
     name: String,
     path: PathBuf,
     position: Vector2,
@@ -66,7 +67,7 @@ impl Track {
     };
     const ATTENUATION_STRENGTH: f64 = 10.0;
 
-    pub fn new(id: Id, path: PathBuf) -> Result<Self> {
+    pub fn new(id: Ulid, path: PathBuf) -> Result<Self> {
         let name = path
             .with_extension("")
             .file_name()
@@ -246,7 +247,7 @@ impl Track {
         }
     }
 
-    pub fn id(&self) -> Id {
+    pub fn id(&self) -> Ulid {
         self.id
     }
 

@@ -8,8 +8,9 @@ use iced::{
     widget::{Action, canvas},
     window,
 };
+use ulid::Ulid;
 
-use crate::{Id, Vector2, track::Track};
+use crate::{Vector2, track::Track};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Message {
@@ -24,11 +25,11 @@ pub enum Message {
     NewWaypoint(Vector2),
     ListenerMoved(Vector2),
     NewTrack {
-        id: Id,
+        id: Ulid,
         position: Vector2,
         radius: f32,
     },
-    TrackRemoved(Id),
+    TrackRemoved(Ulid),
 }
 
 impl From<&Track> for Message {
@@ -53,7 +54,7 @@ pub enum State {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct TrackInfo {
-    id: Id,
+    id: Ulid,
     position: Vector2,
     radius: f32,
 }
@@ -61,7 +62,7 @@ struct TrackInfo {
 #[derive(Debug, Clone)]
 pub struct Soundscape {
     listener: Listener,
-    tracks: HashMap<Id, TrackInfo>,
+    tracks: HashMap<Ulid, TrackInfo>,
     camera: Vector2,
     scale: f32,
     current: Instant,

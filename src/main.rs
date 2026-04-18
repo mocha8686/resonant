@@ -5,21 +5,22 @@ use iced::{
     widget::{button, column, container, stack, text},
 };
 use resonant::{
-    Id, IdGenerator, soundscape::{self, Soundscape}, track::{self, Track}
+    soundscape::{self, Soundscape},
+    track::{self, Track},
 };
 use rfd::FileDialog;
+use ulid::Ulid;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum MainMessage {
-    Track(track::Message, Id),
+    Track(track::Message, Ulid),
     Soundscape(soundscape::Message),
     AddTrack,
 }
 
 struct State {
-    tracks: HashMap<Id, Track>,
+    tracks: HashMap<Ulid, Track>,
     soundscape: Soundscape,
-    id_generator: IdGenerator,
 }
 
 impl Default for State {
@@ -27,7 +28,6 @@ impl Default for State {
         Self {
             tracks: HashMap::new(),
             soundscape: Soundscape::new(),
-            id_generator: IdGenerator::new(),
         }
     }
 }
@@ -72,7 +72,8 @@ impl State {
                     .add_filter("audio", &["flac", "mp3", "ogg", "wav", "webm"])
                     .pick_file()
                 {
-                    let track = Track::new(self.id_generator.next_id(), path).expect("should be able to create track");
+                    let track = Track::new(Ulid::new(), path)
+                        .expect("should be able to create track");
                     let task = self
                         .soundscape
                         .update((&track).into())
