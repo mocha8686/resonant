@@ -8,6 +8,7 @@
 )]
 
 pub(crate) mod components;
+pub mod scene;
 pub mod soundscape;
 pub mod track;
 mod vector;
