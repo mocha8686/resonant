@@ -178,11 +178,18 @@ impl Track {
     }
 
     pub fn view(&self) -> Element<'_, Message> {
+        let position = match &self.handle {
+            Handle::Uninitialized(Some(data)) => match data.settings.start_position {
+                PlaybackPosition::Seconds(time) => time as f32,
+                PlaybackPosition::Samples(_) => 0.0,
+            },
+            Handle::Initialized(handle) => handle.position() as f32,
+            Handle::Uninitialized(_) => 0.0,
+        };
+
         column![
             text(self.name.clone()),
-            self.progress
-                .view(self.track_position())
-                .map(Message::Progress),
+            self.progress.view(position).map(Message::Progress),
             self.play_pause.view().map(Message::PlayPause),
             self.looping.view().map(Message::Loop),
             button("-").on_press(Message::Remove),
@@ -245,17 +252,6 @@ impl Track {
             unreachable!()
         };
         Ok(data)
-    }
-
-    fn track_position(&self) -> f32 {
-        match &self.handle {
-            Handle::Uninitialized(Some(data)) => match data.settings.start_position {
-                PlaybackPosition::Seconds(time) => time as f32,
-                PlaybackPosition::Samples(_) => 0.0,
-            },
-            Handle::Initialized(handle) => handle.position() as f32,
-            Handle::Uninitialized(_) => 0.0,
-        }
     }
 
     pub fn id(&self) -> Ulid {
