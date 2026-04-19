@@ -64,14 +64,14 @@ pub enum State {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-struct TrackInfo {
+struct TrackZone {
     id: Ulid,
     name: String,
     position: Vector2,
     radius: f32,
 }
 
-impl TrackInfo {
+impl TrackZone {
     fn contains(&self, point: Vector2) -> bool {
         let delta = self.position - point;
         delta.square_magnitude() <= self.radius * self.radius
@@ -81,7 +81,7 @@ impl TrackInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Soundscape {
     listener: Listener,
-    tracks: HashMap<Ulid, TrackInfo>,
+    tracks: HashMap<Ulid, TrackZone>,
     camera: Vector2,
     scale: f32,
     #[serde(skip, default = "Instant::now")]
@@ -187,7 +187,7 @@ impl Soundscape {
             } => {
                 self.tracks.insert(
                     id,
-                    TrackInfo {
+                    TrackZone {
                         id,
                         name,
                         position,
