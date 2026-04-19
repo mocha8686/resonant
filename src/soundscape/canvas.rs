@@ -195,6 +195,100 @@ impl Soundscape {
     fn find_track_at_point(&self, point: Vector2) -> Option<&super::TrackZone> {
         self.tracks.values().find(|t| t.contains(point))
     }
+
+    fn handle_mouse_event(
+        &self,
+        state: &mut State,
+        event: &mouse::Event,
+        bounds: Rectangle,
+        cursor: Cursor,
+    ) -> Option<canvas::Action<Message>> {
+        match event {
+            mouse::Event::CursorMoved { position } => match state {
+                State::None => None,
+                State::Pending { cursor_pos } => {
+                    let cursor_pos = *cursor_pos;
+                    let delta = cursor_pos - position.into();
+                    if delta.square_magnitude()
+                        <= Self::CURSOR_MOVE_THRESHOLD * Self::CURSOR_MOVE_THRESHOLD
+                    {
+                        return None;
+                    }
+
+                    let position = Vector2::from(position);
+                    let world_position = self.screen_to_world(position, bounds.center().into());
+
+                    if let Some(track) = self.find_track_at_point(world_position) {
+                        let id = track.id;
+                        *state = State::MovingTrack {
+                            id,
+                            cursor_start: cursor_pos,
+                            original_position: track.position,
+                        };
+                        Some(self.calculate_track_move(id, position - cursor_pos, track.position))
+                    } else {
+                        *state = State::Panning {
+                            cursor_start: cursor_pos,
+                            original_position: self.camera,
+                        };
+                        Some(self.calculate_pan(position - cursor_pos, self.camera))
+                    }
+                }
+                State::Panning {
+                    cursor_start,
+                    original_position,
+                } => {
+                    let delta = Vector2::from(position) - *cursor_start;
+                    Some(self.calculate_pan(delta, *original_position))
+                }
+                State::MovingTrack {
+                    id,
+                    cursor_start,
+                    original_position,
+                } => {
+                    let delta = Vector2::from(position) - *cursor_start;
+                    Some(self.calculate_track_move(*id, delta, *original_position))
+                }
+            },
+            mouse::Event::ButtonPressed(mouse::Button::Left)
+                if !cursor.is_levitating()
+                    && let Some(position) = cursor.position() =>
+            {
+                *state = State::Pending {
+                    cursor_pos: position.into(),
+                };
+                None
+            }
+            mouse::Event::ButtonReleased(mouse::Button::Left) => {
+                let action = match state {
+                    State::Pending { cursor_pos } => {
+                        let id = self
+                            .find_track_at_point(
+                                self.screen_to_world(*cursor_pos, bounds.center().into()),
+                            )
+                            .map(|t| t.id);
+                        Some(canvas::Action::publish(Message::TrackSelected(id)))
+                    }
+                    _ => None,
+                };
+                *state = State::None;
+                action
+            },
+            mouse::Event::WheelScrolled { delta } if !cursor.is_levitating() => match state {
+                State::None | State::Pending { .. } | State::Panning { .. } => match *delta {
+                    mouse::ScrollDelta::Lines { y, .. } | mouse::ScrollDelta::Pixels { y, .. } => {
+                        let action = self.calculate_zoom(
+                            cursor.position_from(bounds.center()).map(Vector2::from),
+                            y,
+                        );
+                        Some(action)
+                    }
+                },
+                State::MovingTrack { .. } => None,
+            },
+            _ => None,
+        }
+    }
 }
 
 impl canvas::Program<Message> for Soundscape {
@@ -285,101 +379,7 @@ impl canvas::Program<Message> for Soundscape {
         cursor: mouse::Cursor,
     ) -> Option<canvas::Action<Message>> {
         match event {
-            Event::Mouse(event) => match event {
-                mouse::Event::CursorMoved { position } => match state {
-                    State::None => None,
-                    State::Pending { cursor_pos } => {
-                        let cursor_pos = *cursor_pos;
-                        let delta = cursor_pos - position.into();
-                        if delta.square_magnitude()
-                            <= Self::CURSOR_MOVE_THRESHOLD * Self::CURSOR_MOVE_THRESHOLD
-                        {
-                            return None;
-                        }
-
-                        let position = Vector2::from(position);
-                        let world_position = self.screen_to_world(position, bounds.center().into());
-
-                        if let Some(track) = self.find_track_at_point(world_position) {
-                            let id = track.id;
-                            *state = State::MovingTrack {
-                                id,
-                                cursor_start: cursor_pos,
-                                original_position: track.position,
-                            };
-                            Some(self.calculate_track_move(
-                                id,
-                                position - cursor_pos,
-                                track.position,
-                            ))
-                        } else {
-                            *state = State::Panning {
-                                cursor_start: cursor_pos,
-                                original_position: self.camera,
-                            };
-                            Some(self.calculate_pan(position - cursor_pos, self.camera))
-                        }
-                    }
-                    State::Panning {
-                        cursor_start,
-                        original_position,
-                    } => {
-                        let delta = Vector2::from(position) - *cursor_start;
-                        Some(self.calculate_pan(delta, *original_position))
-                    }
-                    State::MovingTrack {
-                        id,
-                        cursor_start,
-                        original_position,
-                    } => {
-                        let delta = Vector2::from(position) - *cursor_start;
-                        Some(self.calculate_track_move(*id, delta, *original_position))
-                    }
-                },
-                mouse::Event::ButtonPressed(button) if !cursor.is_levitating() => match button {
-                    mouse::Button::Left => {
-                        if let Some(position) = cursor.position() {
-                            *state = State::Pending {
-                                cursor_pos: position.into(),
-                            };
-                        }
-                        None
-                    }
-                    _ => None,
-                },
-                mouse::Event::ButtonReleased(button) => match button {
-                    mouse::Button::Left => {
-                        let action = match state {
-                            State::Pending { cursor_pos } => {
-                                let id = self
-                                    .find_track_at_point(
-                                        self.screen_to_world(*cursor_pos, bounds.center().into()),
-                                    )
-                                    .map(|t| t.id);
-                                Some(canvas::Action::publish(Message::TrackSelected(id)))
-                            }
-                            _ => None,
-                        };
-                        *state = State::None;
-                        action
-                    }
-                    _ => None,
-                },
-                mouse::Event::WheelScrolled { delta } if !cursor.is_levitating() => match state {
-                    State::None | State::Pending { .. } | State::Panning { .. } => match *delta {
-                        mouse::ScrollDelta::Lines { y, .. }
-                        | mouse::ScrollDelta::Pixels { y, .. } => {
-                            let action = self.calculate_zoom(
-                                cursor.position_from(bounds.center()).map(Vector2::from),
-                                y,
-                            );
-                            Some(action)
-                        }
-                    },
-                    State::MovingTrack { .. } => None,
-                },
-                _ => None,
-            },
+            Event::Mouse(event) => self.handle_mouse_event(state, event, bounds, cursor),
             Event::Keyboard(event) if !cursor.is_levitating() => match event {
                 keyboard::Event::KeyPressed {
                     physical_key: keyboard::key::Physical::Code(keyboard::key::Code::KeyW),
