@@ -7,11 +7,11 @@ use std::{
 use iced::{
     Element, Event,
     Length::Fill,
-    Rectangle, Renderer, Subscription, Task, Theme, Vector,
+    Rectangle, Renderer, Subscription, Theme, Vector,
     alignment::Vertical,
     keyboard,
     mouse::{self, Cursor},
-    widget::{Action, canvas, text::Alignment},
+    widget::{canvas, text::Alignment},
     window,
 };
 use serde::{Deserialize, Serialize};
@@ -30,7 +30,6 @@ pub enum Message {
     },
     NewFrame(Instant),
     NewWaypoint(Vector2),
-    ListenerMoved(Vector2),
     NewTrack {
         id: Ulid,
         name: String,
@@ -42,6 +41,12 @@ pub enum Message {
         id: Ulid,
         new_position: Vector2,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Action {
+    MoveTrack(Ulid, Vector2),
+    MoveListener(Vector2),
 }
 
 impl From<&Track> for Message {
@@ -137,7 +142,7 @@ impl Soundscape {
         }
     }
 
-    pub fn update(&mut self, msg: Message) -> Task<Message> {
+    pub fn update(&mut self, msg: Message) -> Option<Action> {
         match msg {
             Message::Translated { new_position } => {
                 self.camera = new_position;
@@ -170,7 +175,7 @@ impl Soundscape {
                         self.waypoints.pop_front();
                     }
 
-                    Some(Task::done(Message::ListenerMoved(self.listener.position)))
+                    Some(Action::MoveListener(self.listener.position))
                 } else {
                     None
                 }
@@ -185,7 +190,6 @@ impl Soundscape {
                 self.waypoints.push_back(point);
                 None
             }
-            Message::ListenerMoved(_) => None,
             Message::NewTrack {
                 id,
                 name,
@@ -211,10 +215,9 @@ impl Soundscape {
                 if let Some(track) = self.tracks.get_mut(&id) {
                     track.position = new_position;
                 }
-                None
+                Some(Action::MoveTrack(id, new_position))
             }
         }
-        .unwrap_or_else(Task::none)
     }
 
     #[must_use]
@@ -226,7 +229,7 @@ impl Soundscape {
         window::frames().map(Message::NewFrame)
     }
 
-    fn calculate_zoom(&self, offset_to_center: Option<Vector2>, scroll_y: f32) -> Action<Message> {
+    fn calculate_zoom(&self, offset_to_center: Option<Vector2>, scroll_y: f32) -> canvas::Action<Message> {
         if scroll_y < 0.0 && self.scale > Self::MIN_SCALE
             || scroll_y > 0.0 && self.scale < Self::MAX_SCALE
         {
@@ -436,7 +439,7 @@ impl canvas::Program<Message> for Soundscape {
         event: &Event,
         bounds: Rectangle,
         cursor: mouse::Cursor,
-    ) -> Option<Action<Message>> {
+    ) -> Option<canvas::Action<Message>> {
         if cursor.is_levitating() {
             return None;
         }

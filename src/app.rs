@@ -39,10 +39,10 @@ impl App {
 
     pub fn update(&mut self, msg: Message) -> Task<Message> {
         match msg {
-            Message::Scene(msg) => Some(self.active_scene_mut().update(msg).map(Message::Scene)),
+            Message::Scene(msg) => self.active_scene_mut().update(msg).map(Message::Scene),
             Message::SwitchScene(index) => {
                 self.active_index = index;
-                None
+                Task::none()
             }
             Message::Save => {
                 if let Some(mut path) = FileDialog::new()
@@ -76,7 +76,7 @@ impl App {
                     std::fs::rename(&swapfile_path, &path)
                         .expect("should be able to commit swapfile");
                 }
-                None
+                Task::none()
             }
             Message::Load => {
                 if let Some(path) = FileDialog::new()
@@ -96,17 +96,12 @@ impl App {
 
                     self.scenes.push(scene);
 
-                    Some(
-                        self.active_scene_mut()
-                            .update(scene::Message::Loaded)
-                            .map(Message::Scene),
-                    )
+                    Task::done(Message::Scene(scene::Message::Loaded))
                 } else {
-                    None
+                    Task::none()
                 }
             }
         }
-        .unwrap_or_else(Task::none)
     }
 
     pub fn view(&self) -> Element<'_, Message> {

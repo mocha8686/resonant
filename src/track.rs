@@ -39,6 +39,12 @@ pub enum Message {
         new_position: Vector2,
         listener_position: Vector2,
     },
+    WillRemove,
+}
+
+#[derive(Debug)]
+pub enum Action {
+    Run(Task<Message>),
     Remove,
 }
 
@@ -119,7 +125,7 @@ impl Track {
         })
     }
 
-    pub fn update(&mut self, msg: Message) -> Task<Message> {
+    pub fn update(&mut self, msg: Message) -> Option<Action> {
         match msg {
             Message::PlayPause(m) => {
                 match m {
@@ -143,11 +149,11 @@ impl Track {
                     }
                 }
 
-                Some(
+                Some(Action::Run(
                     self.progress
                         .update(m, self.play_pause.is_on())
                         .map(Message::Progress),
-                )
+                ))
             }
             Message::Loop(m) => {
                 let loop_region: Option<Region> = match m {
@@ -181,9 +187,8 @@ impl Track {
                 self.recalculate_volume(listener_position);
                 None
             }
-            Message::Remove => None,
+            Message::WillRemove => Some(Action::Remove),
         }
-        .unwrap_or(Task::none())
     }
 
     pub fn view(&self) -> Element<'_, Message> {
@@ -201,7 +206,7 @@ impl Track {
             self.progress.view(position).map(Message::Progress),
             self.play_pause.view().map(Message::PlayPause),
             self.looping.view().map(Message::Loop),
-            button("-").on_press(Message::Remove),
+            button("-").on_press(Message::WillRemove),
         ]
         .into()
     }

@@ -41,52 +41,45 @@ impl Scene {
     pub fn update(&mut self, msg: Message) -> Task<Message> {
         match msg {
             Message::Track(msg, id) => {
-                if let Some(track) = self.tracks.get_mut(&id) {
-                    if msg == track::Message::Remove {
-                        self.tracks.remove(&id);
-                        Some(
-                            self.soundscape
-                                .update(soundscape::Message::TrackRemoved(id))
-                                .map(Message::Soundscape),
-                        )
-                    } else {
-                        Some(track.update(msg).map(move |m| Message::Track(m, id)))
+                if let Some(track) = self.tracks.get_mut(&id)
+                    && let Some(action) = track.update(msg)
+                {
+                    match action {
+                        track::Action::Run(task) => task.map(move |msg| Message::Track(msg, id)),
+                        track::Action::Remove => {
+                            self.tracks.remove(&id);
+                            Task::done(Message::Soundscape(soundscape::Message::TrackRemoved(id)))
+                        }
                     }
                 } else {
-                    None
+                    Task::none()
                 }
             }
             Message::Soundscape(msg) => {
-                let task = match msg {
-                    soundscape::Message::TrackMoved { id, new_position } => {
-                        if let Some((_, track)) = self
-                            .tracks
-                            .iter_mut()
-                            .find(|(track_id, _)| id == **track_id)
-                        {
-                            track
-                                .update(track::Message::Moved {
+                if let Some(action) = self.soundscape.update(msg) {
+                    match action {
+                        soundscape::Action::MoveTrack(id, new_position) => {
+                            Task::done(Message::Track(
+                                track::Message::Moved {
                                     new_position,
                                     listener_position: self.soundscape.listener_position(),
-                                })
-                                .map(move |msg| Message::Track(msg, id))
-                        } else {
-                            Task::none()
+                                },
+                                id,
+                            ))
+                        }
+                        soundscape::Action::MoveListener(new_position) => {
+                            let tasks = self.tracks.keys().map(|id| {
+                                Task::done(Message::Track(
+                                    track::Message::ListenerMoved(new_position),
+                                    *id,
+                                ))
+                            });
+                            Task::batch(tasks)
                         }
                     }
-                    soundscape::Message::ListenerMoved(new_position) => {
-                        let tasks = self.tracks.values_mut().map(|t| {
-                            let id = t.id();
-                            t.update(track::Message::ListenerMoved(new_position))
-                                .map(move |m| Message::Track(m, id))
-                        });
-                        Task::batch(tasks)
-                    }
-                    _ => Task::none(),
-                };
-
-                let task = task.chain(self.soundscape.update(msg).map(Message::Soundscape));
-                Some(task)
+                } else {
+                    Task::none()
+                }
             }
             Message::AddTrack => {
                 if let Some(path) = FileDialog::new()
@@ -95,30 +88,24 @@ impl Scene {
                 {
                     let track =
                         Track::new(Ulid::new(), &path).expect("should be able to create track");
-                    let task = self
-                        .soundscape
-                        .update((&track).into())
-                        .map(Message::Soundscape);
+                    let task = Task::done(Message::Soundscape((&track).into()));
                     self.tracks.insert(track.id(), track);
 
-                    Some(task)
+                    task
                 } else {
-                    None
+                    Task::none()
                 }
             }
             Message::Loaded => {
-                let tasks = self.tracks.iter_mut().map(|(id, track)| {
-                    let id = *id;
-                    track
-                        .update(track::Message::ListenerMoved(
-                            self.soundscape.listener_position(),
-                        ))
-                        .map(move |msg| Message::Track(msg, id))
+                let tasks = self.tracks.keys().map(|id| {
+                    Task::done(Message::Track(
+                        track::Message::ListenerMoved(self.soundscape.listener_position()),
+                        *id,
+                    ))
                 });
-                Some(Task::batch(tasks))
+                Task::batch(tasks)
             }
         }
-        .unwrap_or_else(Task::none)
     }
 
     pub fn view(&self) -> Element<'_, Message> {
