@@ -86,9 +86,9 @@ impl Track {
         let name = original_path
             .with_extension("")
             .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or("Unknown filename")
-            .to_string();
+            .map_or("Unknown filename".into(), |s| {
+                s.to_string_lossy().to_string()
+            });
 
         let manager = AudioManager::new(AudioManagerSettings::default())?;
 
@@ -177,7 +177,7 @@ impl Track {
                 self.position = new_position;
                 self.recalculate_volume(listener_position);
                 None
-            },
+            }
             Message::ListenerMoved(listener_position) => {
                 self.recalculate_volume(listener_position);
                 None
@@ -266,8 +266,8 @@ impl Track {
 
     fn recalculate_volume(&mut self, listener_position: Vector2) {
         let t = 1.0 - (listener_position - self.position).magnitude() / self.radius;
-        let t_log = (t as f64 * (Self::ATTENUATION_STRENGTH - 1.0) + 1.0)
-            .log(Self::ATTENUATION_STRENGTH);
+        let t_log =
+            (t as f64 * (Self::ATTENUATION_STRENGTH - 1.0) + 1.0).log(Self::ATTENUATION_STRENGTH);
         let volume = Decibels::interpolate(Decibels::SILENCE, Decibels::IDENTITY, t_log);
 
         match &mut self.handle {
