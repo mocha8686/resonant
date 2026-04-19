@@ -1,6 +1,9 @@
 use std::fs::File;
 
-use crate::scene::{self, Scene, SceneData};
+use crate::{
+    PROJECT_DIRS,
+    scene::{self, Scene, SceneData},
+};
 use iced::{
     Element,
     Length::Fill,
@@ -50,13 +53,21 @@ impl App {
                         path.add_extension(Self::FILE_EXTENSION);
                     }
 
-                    let mut file =
-                        File::create_buffered(path).expect("should be able to open save file");
+                    let swapfile_path =
+                        PROJECT_DIRS.cache_dir().with_file_name(path.file_name().unwrap());
 
-                    let data = SceneData::try_from(self.active_scene())
-                        .expect("should be able to convert scene to data");
-                    rmp_serde::encode::write(&mut file, &data)
-                        .expect("should be able to write to save file");
+                    {
+                        let data = SceneData::try_from(self.active_scene())
+                            .expect("should be able to convert scene to data");
+
+                        let mut swapfile = File::create_buffered(&swapfile_path)
+                            .expect("should be able to open swapfile");
+
+                        rmp_serde::encode::write(&mut swapfile, &data)
+                            .expect("should be able to write to swapfile");
+                    }
+
+                    std::fs::rename(&swapfile_path, &path).expect("should be able to commit swapfile");
                 }
                 None
             }
