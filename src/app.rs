@@ -15,6 +15,7 @@ use rfd::FileDialog;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     Scene(scene::Message),
+    SwitchScene(usize),
     Save,
     Load,
 }
@@ -39,6 +40,10 @@ impl App {
     pub fn update(&mut self, msg: Message) -> Task<Message> {
         match msg {
             Message::Scene(msg) => Some(self.active_scene_mut().update(msg).map(Message::Scene)),
+            Message::SwitchScene(index) => {
+                self.active_index = index;
+                None
+            }
             Message::Save => {
                 if let Some(mut path) = FileDialog::new()
                     .add_filter("resonant scene", &[Self::FILE_EXTENSION])
@@ -53,8 +58,9 @@ impl App {
                         path.add_extension(Self::FILE_EXTENSION);
                     }
 
-                    let swapfile_path =
-                        PROJECT_DIRS.cache_dir().with_file_name(path.file_name().unwrap());
+                    let swapfile_path = PROJECT_DIRS
+                        .cache_dir()
+                        .with_file_name(path.file_name().unwrap());
 
                     {
                         let data = SceneData::try_from(self.active_scene())
@@ -67,7 +73,8 @@ impl App {
                             .expect("should be able to write to swapfile");
                     }
 
-                    std::fs::rename(&swapfile_path, &path).expect("should be able to commit swapfile");
+                    std::fs::rename(&swapfile_path, &path)
+                        .expect("should be able to commit swapfile");
                 }
                 None
             }
@@ -103,7 +110,20 @@ impl App {
     }
 
     pub fn view(&self) -> Element<'_, Message> {
-        let topbar = container(row![
+        let tabs = row(self.scenes.iter().enumerate().map(|(i, scene)| {
+            let style = if self.active_index == i {
+                button::primary
+            } else {
+                button::background
+            };
+            button(scene.name())
+                .on_press(Message::SwitchScene(i))
+                .style(style)
+                .width(200)
+                .into()
+        }));
+
+        let scene_info = container(row![
             text(self.active_scene().name()),
             button("Save")
                 .on_press(Message::Save)
@@ -115,6 +135,8 @@ impl App {
         .style(container::primary)
         .padding(4)
         .width(Fill);
+
+        let topbar = column![tabs, scene_info];
 
         column![topbar, self.active_scene().view().map(Message::Scene),].into()
     }
