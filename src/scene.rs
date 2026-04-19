@@ -22,6 +22,7 @@ pub enum Message {
 }
 
 pub struct Scene {
+    name: String,
     tracks: OrderMap<Ulid, Track>,
     soundscape: Soundscape,
 }
@@ -29,6 +30,7 @@ pub struct Scene {
 impl Default for Scene {
     fn default() -> Self {
         Self {
+            name: String::from("New Scene"),
             tracks: OrderMap::new(),
             soundscape: Soundscape::new(),
         }
@@ -144,5 +146,10 @@ impl Scene {
 
     pub fn subscription(&self) -> Subscription<Message> {
         self.soundscape.subscription().map(Message::Soundscape)
+    }
+
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
     }
 }

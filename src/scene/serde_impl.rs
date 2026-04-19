@@ -10,8 +10,20 @@ use crate::{
 
 #[derive(Serialize, Deserialize)]
 pub struct SceneData {
+    #[serde(skip)]
+    name: String,
     tracks: OrderMap<Ulid, TrackData>,
     soundscape: Soundscape,
+}
+
+impl SceneData {
+    #[must_use]
+    pub fn with_name(self, name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            ..self
+        }
+    }
 }
 
 impl TryFrom<&Scene> for SceneData {
@@ -25,6 +37,7 @@ impl TryFrom<&Scene> for SceneData {
             .try_collect()?;
 
         Ok(Self {
+            name: scene.name.clone(),
             tracks,
             soundscape: scene.soundscape.clone(),
         })
@@ -42,6 +55,7 @@ impl TryFrom<SceneData> for Scene {
             .try_collect()?;
 
         Ok(Self {
+            name: scene_data.name.clone(),
             tracks,
             soundscape: scene_data.soundscape,
         })
