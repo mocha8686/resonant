@@ -12,6 +12,7 @@ use iced::{
     widget::{Action, canvas},
     window,
 };
+use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
 use crate::{Vector2, track::Track};
@@ -56,24 +57,25 @@ pub enum State {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 struct TrackInfo {
     id: Ulid,
     position: Vector2,
     radius: f32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Soundscape {
     listener: Listener,
     tracks: HashMap<Ulid, TrackInfo>,
     camera: Vector2,
     scale: f32,
+    #[serde(skip, default = "Instant::now")]
     current: Instant,
     waypoints: VecDeque<Vector2>,
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 struct Listener {
     position: Vector2,
 }

@@ -2,7 +2,6 @@ use crate::{
     soundscape::{self, Soundscape},
     track::{self, Track},
 };
-use directories::ProjectDirs;
 use iced::{
     Element, Subscription, Task,
     widget::{button, column, container, stack, text},
@@ -10,6 +9,9 @@ use iced::{
 use ordermap::OrderMap;
 use rfd::FileDialog;
 use ulid::Ulid;
+
+mod serde_impl;
+pub use serde_impl::SceneData;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Message {
@@ -21,18 +23,13 @@ pub enum Message {
 pub struct Scene {
     tracks: OrderMap<Ulid, Track>,
     soundscape: Soundscape,
-    directories: ProjectDirs,
 }
 
 impl Default for Scene {
     fn default() -> Self {
-        let directories = ProjectDirs::from("com.github", "mocha8686", env!("CARGO_PKG_NAME"))
-            .expect("current user should have a home directory");
-
         Self {
             tracks: OrderMap::new(),
             soundscape: Soundscape::new(),
-            directories,
         }
     }
 }
@@ -77,8 +74,8 @@ impl Scene {
                     .add_filter("audio", &["flac", "mp3", "ogg", "wav", "webm"])
                     .pick_file()
                 {
-                    let track = Track::new(Ulid::new(), &path, self.directories.cache_dir())
-                        .expect("should be able to create track");
+                    let track =
+                        Track::new(Ulid::new(), &path).expect("should be able to create track");
                     let task = self
                         .soundscape
                         .update((&track).into())

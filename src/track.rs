@@ -17,7 +17,7 @@ use kira::{
 };
 use ulid::Ulid;
 
-use crate::{Vector2, components::Toggle};
+use crate::{Vector2, components::Toggle, create_directories};
 use looping::Loop;
 use play_pause::PlayPause;
 use progress::Progress;
@@ -25,6 +25,9 @@ use progress::Progress;
 mod looping;
 mod play_pause;
 mod progress;
+mod serde_impl;
+
+pub use serde_impl::TrackData;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Message {
@@ -56,6 +59,12 @@ enum Handle {
     Initialized(FileStreamingSoundHandle),
 }
 
+impl Default for Handle {
+    fn default() -> Self {
+        Self::Uninitialized(None)
+    }
+}
+
 impl Track {
     const TWEEN_DEFAULT: Tween = Tween {
         start_time: StartTime::Immediate,
@@ -69,7 +78,7 @@ impl Track {
     };
     const ATTENUATION_STRENGTH: f64 = 10.0;
 
-    pub fn new(id: Ulid, original_path: &Path, cache_dir: &Path) -> Result<Self> {
+    pub fn new(id: Ulid, original_path: &Path) -> Result<Self> {
         let name = original_path
             .with_extension("")
             .file_name()
@@ -78,6 +87,9 @@ impl Track {
             .to_string();
 
         let manager = AudioManager::new(AudioManagerSettings::default())?;
+
+        let directories = create_directories();
+        let cache_dir = directories.cache_dir();
 
         std::fs::create_dir_all(cache_dir)?;
         let cache_dest = cache_dir.join(id.to_string()).with_extension(

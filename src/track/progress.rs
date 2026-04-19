@@ -96,4 +96,8 @@ impl Progress {
     pub fn stop_seeking(&mut self) {
         self.seeking = false;
     }
+
+    pub fn duration(&self) -> f32 {
+        self.duration
+    }
 }
