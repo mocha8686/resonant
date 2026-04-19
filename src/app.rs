@@ -4,7 +4,7 @@ use iced::{
     Element,
     Length::Fill,
     Subscription, Task,
-    widget::{button, column, container, row},
+    widget::{button, column, container, row, text},
 };
 use crate::scene::{self, Scene, SceneData};
 use rfd::FileDialog;
@@ -92,7 +92,8 @@ impl App {
     }
 
     pub fn view(&self) -> Element<'_, Message> {
-        let button_row = container(row![
+        let topbar = container(row![
+            text(self.active_scene().name()),
             button("Save")
                 .on_press(Message::Save)
                 .style(button::background),
@@ -104,7 +105,7 @@ impl App {
         .padding(4)
         .width(Fill);
 
-        column![button_row, self.active_scene().view().map(Message::Scene),].into()
+        column![topbar, self.active_scene().view().map(Message::Scene),].into()
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
