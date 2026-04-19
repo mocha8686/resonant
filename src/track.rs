@@ -6,7 +6,7 @@ use std::{
 use anyhow::Result;
 use iced::{
     Element, Task,
-    widget::{button, column, text},
+    widget::{button, column, container, text},
 };
 use kira::{
     AudioManager, AudioManagerSettings, Decibels, Easing, StartTime, Tween, Tweenable,
@@ -34,6 +34,7 @@ pub enum Message {
     PlayPause(play_pause::Message),
     Progress(progress::Message),
     Loop(looping::Message),
+    Selected(bool),
     ListenerMoved(Vector2),
     Moved {
         new_position: Vector2,
@@ -57,6 +58,7 @@ pub struct Track {
     path: PathBuf,
     position: Vector2,
     radius: f32,
+    selected: bool,
     manager: AudioManager,
     handle: Handle,
     play_pause: PlayPause,
@@ -87,6 +89,7 @@ impl Track {
         easing: Easing::Linear,
     };
     const ATTENUATION_STRENGTH: f64 = 10.0;
+    const DEFAULT_RADIUS: f32 = 500.0;
 
     pub fn new(id: Ulid, original_path: &Path) -> Result<Self> {
         let name = original_path
@@ -116,7 +119,8 @@ impl Track {
             name,
             path: cache_dest,
             position: Vector2::default(),
-            radius: 500.0,
+            radius: Self::DEFAULT_RADIUS,
+            selected: false,
             manager,
             handle: Handle::Uninitialized(Some(data)),
             progress: Progress::new(duration),
@@ -175,6 +179,10 @@ impl Track {
                 self.looping.update(m);
                 None
             }
+            Message::Selected(selected) => {
+                self.selected = selected;
+                None
+            }
             Message::Moved {
                 new_position,
                 listener_position,
@@ -201,14 +209,20 @@ impl Track {
             Handle::Uninitialized(_) => 0.0,
         };
 
-        column![
+        let info = column![
             text(self.name.clone()),
             self.progress.view(position).map(Message::Progress),
             self.play_pause.view().map(Message::PlayPause),
             self.looping.view().map(Message::Loop),
             button("-").on_press(Message::WillRemove),
-        ]
-        .into()
+        ];
+
+        let style = if self.selected {
+            container::primary
+        } else {
+            container::secondary
+        };
+        container(info).style(style).into()
     }
 
     fn play(&mut self) -> Result<()> {

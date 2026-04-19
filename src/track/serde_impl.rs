@@ -63,6 +63,7 @@ impl TryFrom<TrackData> for Track {
             path: cache_dest,
             position: track_data.position,
             radius: track_data.radius,
+            selected: false,
             manager,
             handle: Handle::Uninitialized(Some(data)),
             play_pause: PlayPause::new(),

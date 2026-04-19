@@ -59,13 +59,15 @@ impl Scene {
                 if let Some(action) = self.soundscape.update(msg) {
                     match action {
                         soundscape::Action::MoveTrack(id, new_position) => {
-                            Task::done(Message::Track(
+                            let move_task = Task::done(Message::Track(
                                 track::Message::Moved {
                                     new_position,
                                     listener_position: self.soundscape.listener_position(),
                                 },
                                 id,
-                            ))
+                            ));
+                            let select_task = Task::done(Message::Soundscape(soundscape::Message::TrackSelected(Some(id))));
+                            move_task.chain(select_task)
                         }
                         soundscape::Action::MoveListener(new_position) => {
                             let tasks = self.tracks.keys().map(|id| {
@@ -75,6 +77,20 @@ impl Scene {
                                 ))
                             });
                             Task::batch(tasks)
+                        }
+                        soundscape::Action::ChangeSelection {
+                            deselected,
+                            selected,
+                        } => {
+                            let deselected = deselected
+                                .map_or_else(Task::none, |id| {
+                                    Task::done(Message::Track(track::Message::Selected(false), id))
+                                });
+                            let selected = selected
+                                .map_or_else(Task::none, |id| {
+                                    Task::done(Message::Track(track::Message::Selected(true), id))
+                                });
+                            deselected.chain(selected)
                         }
                     }
                 } else {
