@@ -286,6 +286,10 @@ impl Track {
         self.id
     }
 
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
     pub fn position(&self) -> Vector2 {
         self.position
     }

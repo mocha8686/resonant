@@ -5,19 +5,14 @@ use std::{
 };
 
 use iced::{
-    Element, Event,
-    Length::Fill,
-    Rectangle, Renderer, Subscription, Task, Theme, Vector, keyboard,
-    mouse::{self, Cursor},
-    widget::{Action, canvas},
-    window,
+    Element, Event, Length::Fill, Rectangle, Renderer, Subscription, Task, Theme, Vector, alignment::Vertical, keyboard, mouse::{self, Cursor}, widget::{Action, canvas, text::Alignment}, window
 };
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
 use crate::{Vector2, track::Track};
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     Translated {
         new_position: Vector2,
@@ -31,6 +26,7 @@ pub enum Message {
     ListenerMoved(Vector2),
     NewTrack {
         id: Ulid,
+        name: String,
         position: Vector2,
         radius: f32,
     },
@@ -45,6 +41,7 @@ impl From<&Track> for Message {
     fn from(track: &Track) -> Self {
         Self::NewTrack {
             id: track.id(),
+            name: track.name().to_string(),
             position: track.position(),
             radius: track.radius(),
         }
@@ -66,9 +63,10 @@ pub enum State {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct TrackInfo {
     id: Ulid,
+    name: String,
     position: Vector2,
     radius: f32,
 }
@@ -98,10 +96,12 @@ struct Listener {
 
 impl Soundscape {
     const GRID_STROKE_WIDTH: f32 = 1.0;
-    const GRID_TEXT_PAD: f32 = 10.0;
-    const GRID_TEXT_SIZE: u32 = 14;
     const GRID_ALPHA_NORMAL: f32 = 0.3;
     const GRID_ALPHA_HIGHLIGHT: f32 = 0.8;
+
+    const GRID_LINE_LABEL_PAD: f32 = 10.0;
+    const GRID_LINE_LABEL_SIZE: u32 = 14;
+    const GRID_TRACK_LABEL_SIZE: u32 = 48;
 
     const MIN_SCALE: f32 = 0.25;
     const MAX_SCALE: f32 = 2.0;
@@ -181,6 +181,7 @@ impl Soundscape {
             Message::ListenerMoved(_) => None,
             Message::NewTrack {
                 id,
+                name,
                 position,
                 radius,
             } => {
@@ -188,6 +189,7 @@ impl Soundscape {
                     id,
                     TrackInfo {
                         id,
+                        name,
                         position,
                         radius,
                     },
@@ -314,14 +316,14 @@ impl Soundscape {
                 content: world_position.abs().to_string(),
                 position: match direction {
                     Direction::Vertical => {
-                        iced::Point::new(c + 4.0, cross_length - Self::GRID_TEXT_PAD)
+                        iced::Point::new(c + 4.0, cross_length - Self::GRID_LINE_LABEL_PAD)
                     }
-                    Direction::Horizontal => iced::Point::new(Self::GRID_TEXT_PAD, c),
+                    Direction::Horizontal => iced::Point::new(Self::GRID_LINE_LABEL_PAD, c),
                 },
                 color: theme.palette().text.scale_alpha(alpha),
-                align_x: iced::widget::text::Alignment::Left,
-                align_y: iced::alignment::Vertical::Bottom,
-                size: iced::Pixels::from(Self::GRID_TEXT_SIZE),
+                align_x: Alignment::Left,
+                align_y: Vertical::Bottom,
+                size: iced::Pixels::from(Self::GRID_LINE_LABEL_SIZE),
                 ..Default::default()
             };
             frame.fill_text(text);
@@ -399,6 +401,18 @@ impl canvas::Program<Message> for Soundscape {
                     .with_width(2.0)
                     .with_color(theme.extended_palette().primary.strong.color),
             );
+
+            let text = canvas::Text {
+                content: track.name.clone(),
+                position: track.position.into(),
+                color: theme.extended_palette().primary.strong.color,
+                align_x: Alignment::Center,
+                align_y: Vertical::Center,
+                size: iced::Pixels::from(Self::GRID_TRACK_LABEL_SIZE),
+                ..Default::default()
+            };
+
+            frame.fill_text(text);
         }
 
         let mut grid_frame = canvas::Frame::new(renderer, bounds.size());

@@ -13,7 +13,7 @@ use ulid::Ulid;
 mod serde_impl;
 pub use serde_impl::SceneData;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     Track(track::Message, Ulid),
     Soundscape(soundscape::Message),

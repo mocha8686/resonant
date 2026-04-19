@@ -5,7 +5,7 @@ use iced::{Element, Subscription, Task, widget::{button, column, row}};
 use resonant::scene::{self, Scene, SceneData};
 use rfd::FileDialog;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 enum Message {
     Scene(scene::Message),
     Save,
