@@ -7,7 +7,7 @@ use ulid::Ulid;
 use super::{
     FileStreamingSoundData, Handle, Track, looping::Loop, play_pause::PlayPause, progress::Progress,
 };
-use crate::{Vector2, create_directories};
+use crate::{PROJECT_DIRS, Vector2};
 
 #[derive(Serialize, Deserialize)]
 pub struct TrackData {
@@ -50,8 +50,7 @@ impl TryFrom<TrackData> for Track {
     fn try_from(track_data: TrackData) -> Result<Self, Self::Error> {
         let manager = AudioManager::new(AudioManagerSettings::default())?;
 
-        let directories = create_directories();
-        let cache_dir = directories.cache_dir();
+        let cache_dir = PROJECT_DIRS.cache_dir();
 
         std::fs::create_dir_all(cache_dir)?;
         let cache_dest = cache_dir

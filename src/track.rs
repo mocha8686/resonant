@@ -17,7 +17,7 @@ use kira::{
 };
 use ulid::Ulid;
 
-use crate::{Vector2, components::Toggle, create_directories};
+use crate::{PROJECT_DIRS, Vector2, components::Toggle};
 use looping::Loop;
 use play_pause::PlayPause;
 use progress::Progress;
@@ -92,8 +92,7 @@ impl Track {
 
         let manager = AudioManager::new(AudioManagerSettings::default())?;
 
-        let directories = create_directories();
-        let cache_dir = directories.cache_dir();
+        let cache_dir = PROJECT_DIRS.cache_dir();
 
         std::fs::create_dir_all(cache_dir)?;
         let cache_dest = cache_dir.join(id.to_string()).with_extension(

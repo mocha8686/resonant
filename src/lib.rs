@@ -15,12 +15,13 @@ pub mod soundscape;
 pub mod track;
 mod vector;
 
+use std::sync::LazyLock;
+
 pub use app::App;
 use directories::ProjectDirs;
 pub use vector::Vector2;
 
-#[must_use]
-pub fn create_directories() -> ProjectDirs {
+pub(crate) static PROJECT_DIRS: LazyLock<ProjectDirs> = LazyLock::new(|| {
     ProjectDirs::from("com.github", "mocha8686", env!("CARGO_PKG_NAME"))
         .expect("current user should have a home directory")
-}
+});
