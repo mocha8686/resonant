@@ -35,6 +35,10 @@ pub enum Message {
         radius: f32,
     },
     TrackRemoved(Ulid),
+    TrackMoved {
+        id: Ulid,
+        new_position: Vector2,
+    },
 }
 
 impl From<&Track> for Message {
@@ -55,6 +59,11 @@ pub enum State {
         cursor_start: Vector2,
         original_position: Vector2,
     },
+    MovingTrack {
+        id: Ulid,
+        cursor_start: Vector2,
+        original_position: Vector2,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -62,6 +71,13 @@ struct TrackInfo {
     id: Ulid,
     position: Vector2,
     radius: f32,
+}
+
+impl TrackInfo {
+    fn contains(&self, point: Vector2) -> bool {
+        let delta = self.position - point;
+        delta.square_magnitude() <= self.radius * self.radius
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -182,6 +198,12 @@ impl Soundscape {
                 self.tracks.remove(&id);
                 None
             }
+            Message::TrackMoved { id, new_position } => {
+                if let Some(track) = self.tracks.get_mut(&id) {
+                    track.position = new_position;
+                }
+                None
+            }
         }
         .unwrap_or_else(Task::none)
     }
@@ -216,12 +238,6 @@ impl Soundscape {
         } else {
             canvas::Action::capture()
         }
-    }
-
-    fn calculate_pan(&self, delta: Vector2, original_position: Vector2) -> Action<Message> {
-        let new_position = original_position + delta / self.scale;
-        let msg = Message::Translated { new_position };
-        canvas::Action::publish(msg).and_capture()
     }
 
     fn screen_to_world(&self, screen: Vector2, screen_center: Vector2) -> Vector2 {
@@ -310,6 +326,11 @@ impl Soundscape {
             };
             frame.fill_text(text);
         }
+    }
+
+    #[must_use]
+    pub fn listener_position(&self) -> Vector2 {
+        self.listener.position
     }
 }
 
@@ -401,27 +422,55 @@ impl canvas::Program<Message> for Soundscape {
         match event {
             Event::Mouse(event) => match event {
                 mouse::Event::CursorMoved { position } => match state {
+                    State::None => None,
                     State::Panning {
                         cursor_start,
                         original_position,
                     } => {
-                        let action = self.calculate_pan(
-                            Vector2::from(position) - *cursor_start,
-                            *original_position,
-                        );
+                        let delta = Vector2::from(position) - *cursor_start;
+                        let new_position = *original_position + delta / self.scale;
+                        let action = canvas::Action::publish(Message::Translated { new_position })
+                            .and_capture();
                         Some(action)
                     }
-                    State::None => None,
+                    State::MovingTrack {
+                        id,
+                        cursor_start,
+                        original_position,
+                    } => {
+                        let delta = Vector2::from(position) - *cursor_start;
+                        let new_position = *original_position + delta / self.scale;
+                        let action = canvas::Action::publish(Message::TrackMoved {
+                            id: *id,
+                            new_position,
+                        });
+                        Some(action)
+                    }
                 },
                 mouse::Event::ButtonPressed(button) => match button {
                     mouse::Button::Left => {
-                        *state = State::Panning {
-                            cursor_start: cursor
-                                .position()
-                                .unwrap_or_else(|| (0.0, 0.0).into())
-                                .into(),
-                            original_position: self.camera,
-                        };
+                        if let Some(position) = cursor.position() {
+                            let position = Vector2::from(position);
+                            let world_position =
+                                self.screen_to_world(position, bounds.center().into());
+
+                            *state = if let Some((id, track)) = self
+                                .tracks
+                                .iter()
+                                .find(|(_, t)| t.contains(world_position))
+                            {
+                                State::MovingTrack {
+                                    id: *id,
+                                    cursor_start: position,
+                                    original_position: track.position,
+                                }
+                            } else {
+                                State::Panning {
+                                    cursor_start: position,
+                                    original_position: self.camera,
+                                }
+                            }
+                        }
                         None
                     }
                     _ => None,
@@ -430,14 +479,18 @@ impl canvas::Program<Message> for Soundscape {
                     *state = State::None;
                     None
                 }
-                mouse::Event::WheelScrolled { delta } => match *delta {
-                    mouse::ScrollDelta::Lines { y, .. } | mouse::ScrollDelta::Pixels { y, .. } => {
-                        let action = self.calculate_zoom(
-                            cursor.position_from(bounds.center()).map(Vector2::from),
-                            y,
-                        );
-                        Some(action)
-                    }
+                mouse::Event::WheelScrolled { delta } => match state {
+                    State::None | State::Panning { .. } => match *delta {
+                        mouse::ScrollDelta::Lines { y, .. }
+                        | mouse::ScrollDelta::Pixels { y, .. } => {
+                            let action = self.calculate_zoom(
+                                cursor.position_from(bounds.center()).map(Vector2::from),
+                                y,
+                            );
+                            Some(action)
+                        }
+                    },
+                    State::MovingTrack { .. } => None,
                 },
                 _ => None,
             },

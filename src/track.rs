@@ -35,6 +35,10 @@ pub enum Message {
     Progress(progress::Message),
     Loop(looping::Message),
     ListenerMoved(Vector2),
+    Moved {
+        new_position: Vector2,
+        listener_position: Vector2,
+    },
     Remove,
 }
 
@@ -166,22 +170,16 @@ impl Track {
                 self.looping.update(m);
                 None
             }
-            Message::ListenerMoved(new_position) => {
-                let t = 1.0 - (new_position - self.position).magnitude() / self.radius;
-                let t_log = (t as f64 * (Self::ATTENUATION_STRENGTH - 1.0) + 1.0)
-                    .log(Self::ATTENUATION_STRENGTH);
-                let volume = Decibels::interpolate(Decibels::SILENCE, Decibels::IDENTITY, t_log);
-
-                match &mut self.handle {
-                    Handle::Initialized(handle) => {
-                        handle.set_volume(volume, Self::TWEEN_INSTANT);
-                    }
-                    Handle::Uninitialized(data) => {
-                        if let Some(data) = data {
-                            data.settings.volume = volume.into();
-                        }
-                    }
-                }
+            Message::Moved {
+                new_position,
+                listener_position,
+            } => {
+                self.position = new_position;
+                self.recalculate_volume(listener_position);
+                None
+            },
+            Message::ListenerMoved(listener_position) => {
+                self.recalculate_volume(listener_position);
                 None
             }
             Message::Remove => None,
@@ -264,6 +262,24 @@ impl Track {
             unreachable!()
         };
         Ok(data)
+    }
+
+    fn recalculate_volume(&mut self, listener_position: Vector2) {
+        let t = 1.0 - (listener_position - self.position).magnitude() / self.radius;
+        let t_log = (t as f64 * (Self::ATTENUATION_STRENGTH - 1.0) + 1.0)
+            .log(Self::ATTENUATION_STRENGTH);
+        let volume = Decibels::interpolate(Decibels::SILENCE, Decibels::IDENTITY, t_log);
+
+        match &mut self.handle {
+            Handle::Initialized(handle) => {
+                handle.set_volume(volume, Self::TWEEN_INSTANT);
+            }
+            Handle::Uninitialized(data) => {
+                if let Some(data) = data {
+                    data.settings.volume = volume.into();
+                }
+            }
+        }
     }
 
     pub fn id(&self) -> Ulid {

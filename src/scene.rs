@@ -18,6 +18,7 @@ pub enum Message {
     Track(track::Message, Ulid),
     Soundscape(soundscape::Message),
     AddTrack,
+    Loaded,
 }
 
 pub struct Scene {
@@ -55,6 +56,22 @@ impl Scene {
             }
             Message::Soundscape(msg) => {
                 let task = match msg {
+                    soundscape::Message::TrackMoved { id, new_position } => {
+                        if let Some((_, track)) = self
+                            .tracks
+                            .iter_mut()
+                            .find(|(track_id, _)| id == **track_id)
+                        {
+                            track
+                                .update(track::Message::Moved {
+                                    new_position,
+                                    listener_position: self.soundscape.listener_position(),
+                                })
+                                .map(move |msg| Message::Track(msg, id))
+                        } else {
+                            Task::none()
+                        }
+                    }
                     soundscape::Message::ListenerMoved(new_position) => {
                         let tasks = self.tracks.values_mut().map(|t| {
                             let id = t.id();
@@ -86,6 +103,17 @@ impl Scene {
                 } else {
                     None
                 }
+            }
+            Message::Loaded => {
+                let tasks = self.tracks.iter_mut().map(|(id, track)| {
+                    let id = *id;
+                    track
+                        .update(track::Message::ListenerMoved(
+                            self.soundscape.listener_position(),
+                        ))
+                        .map(move |msg| Message::Track(msg, id))
+                });
+                Some(Task::batch(tasks))
             }
         }
         .unwrap_or_else(Task::none)

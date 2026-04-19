@@ -54,8 +54,10 @@ impl State {
                     self.scene = data
                         .try_into()
                         .expect("should be able to load scene from data");
+                    Some(self.scene.update(scene::Message::Loaded).map(Message::Scene))
+                } else {
+                    None
                 }
-                None
             }
         }
         .unwrap_or_else(Task::none)
