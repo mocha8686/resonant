@@ -5,7 +5,14 @@ use std::{
 };
 
 use iced::{
-    Element, Event, Length::Fill, Rectangle, Renderer, Subscription, Task, Theme, Vector, alignment::Vertical, keyboard, mouse::{self, Cursor}, widget::{Action, canvas, text::Alignment}, window
+    Element, Event,
+    Length::Fill,
+    Rectangle, Renderer, Subscription, Task, Theme, Vector,
+    alignment::Vertical,
+    keyboard,
+    mouse::{self, Cursor},
+    widget::{Action, canvas, text::Alignment},
+    window,
 };
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
@@ -292,7 +299,8 @@ impl Soundscape {
                 }
             };
 
-            let top_left = self.screen_to_world(Vector2::new(bounds.x, bounds.y), bounds.center().into());
+            let top_left =
+                self.screen_to_world(Vector2::new(bounds.x, bounds.y), bounds.center().into());
             let start = match direction {
                 Direction::Vertical => top_left.x,
                 Direction::Horizontal => top_left.y,
@@ -468,10 +476,8 @@ impl canvas::Program<Message> for Soundscape {
                             let world_position =
                                 self.screen_to_world(position, bounds.center().into());
 
-                            *state = if let Some((id, track)) = self
-                                .tracks
-                                .iter()
-                                .find(|(_, t)| t.contains(world_position))
+                            *state = if let Some((id, track)) =
+                                self.tracks.iter().find(|(_, t)| t.contains(world_position))
                             {
                                 State::MovingTrack {
                                     id: *id,

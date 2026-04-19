@@ -26,11 +26,7 @@ impl TryFrom<&Track> for TrackData {
     fn try_from(track: &Track) -> Result<Self, Self::Error> {
         let audio_data = std::fs::read(&track.path)?;
 
-        let extension = track
-            .path
-            .extension()
-            .unwrap()
-            .to_os_string();
+        let extension = track.path.extension().unwrap().to_os_string();
 
         Ok(Self {
             id: track.id,
