@@ -2,8 +2,10 @@
 use std::fs::File;
 
 use iced::{
-    Element, Subscription, Task,
-    widget::{button, column, row},
+    Element,
+    Length::Fill,
+    Subscription, Task,
+    widget::{button, column, container, row},
 };
 use resonant::scene::{self, Scene, SceneData};
 use rfd::FileDialog;
@@ -38,7 +40,11 @@ impl State {
             Message::Save => {
                 if let Some(mut path) = FileDialog::new()
                     .add_filter("resonant scene", &[Self::FILE_EXTENSION])
-                    .set_file_name(format!("{}.{}", self.active_scene().name(), Self::FILE_EXTENSION))
+                    .set_file_name(format!(
+                        "{}.{}",
+                        self.active_scene().name(),
+                        Self::FILE_EXTENSION
+                    ))
                     .save_file()
                 {
                     if path.extension().and_then(|s| s.to_str()) != Some(Self::FILE_EXTENSION) {
@@ -87,14 +93,15 @@ impl State {
     }
 
     fn view(&self) -> Element<'_, Message> {
-        column![
-            row![
-                button("Save").on_press(Message::Save),
-                button("Load").on_press(Message::Load),
-            ],
-            self.active_scene().view().map(Message::Scene),
-        ]
-        .into()
+        let button_row = container(row![
+            button("Save").on_press(Message::Save).style(button::background),
+            button("Load").on_press(Message::Load).style(button::background),
+        ])
+        .style(container::primary)
+        .padding(4)
+        .width(Fill);
+
+        column![button_row, self.active_scene().view().map(Message::Scene),].into()
     }
 
     fn subscription(&self) -> Subscription<Message> {
