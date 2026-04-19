@@ -290,7 +290,7 @@ impl Soundscape {
                 }
             };
 
-            let top_left = self.screen_to_world(Vector2::new(0.0, 0.0), bounds.center().into());
+            let top_left = self.screen_to_world(Vector2::new(bounds.x, bounds.y), bounds.center().into());
             let start = match direction {
                 Direction::Vertical => top_left.x,
                 Direction::Horizontal => top_left.y,
