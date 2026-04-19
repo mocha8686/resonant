@@ -1,4 +1,4 @@
-#![feature(iterator_try_collect)]
+#![feature(file_buffered, iterator_try_collect)]
 #![allow(
     clippy::missing_errors_doc,
     clippy::missing_panics_doc,
@@ -8,12 +8,14 @@
     reason = "prototyping"
 )]
 
+mod app;
 pub(crate) mod components;
 pub mod scene;
 pub mod soundscape;
 pub mod track;
 mod vector;
 
+pub use app::App;
 use directories::ProjectDirs;
 pub use vector::Vector2;
 
