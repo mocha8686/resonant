@@ -5,9 +5,14 @@ pub enum Message {
     Press(bool),
 }
 
-#[derive(Default)]
 pub struct Loop {
     is_looping: bool,
+}
+
+impl Default for Loop {
+    fn default() -> Self {
+        Self { is_looping: true }
+    }
 }
 
 impl Loop {
