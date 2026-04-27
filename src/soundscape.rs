@@ -29,16 +29,21 @@ pub enum Message {
         radius: f32,
     },
     TrackRemoved(Ulid),
+    TrackSelected(Option<Ulid>),
     TrackMoved {
         id: Ulid,
         new_position: Vector2,
     },
-    TrackSelected(Option<Ulid>),
+    TrackResized {
+        id: Ulid,
+        new_radius: f32,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Action {
     MoveTrack(Ulid, Vector2),
+    ResizeTrack(Ulid, f32),
     MoveListener(Vector2),
     ChangeSelection {
         deselected: Option<Ulid>,
@@ -190,6 +195,12 @@ impl Soundscape {
                 }
                 Some(Action::MoveTrack(id, new_position))
             }
+            Message::TrackResized { id, new_radius } => {
+                if let Some(track) = self.tracks.get_mut(&id) {
+                    track.radius = new_radius;
+                }
+                Some(Action::ResizeTrack(id, new_radius))
+            }
             Message::TrackSelected(id) => {
                 if id == self.selected_track {
                     None
@@ -219,6 +230,16 @@ impl Soundscape {
     #[must_use]
     pub fn listener_position(&self) -> Vector2 {
         self.listener.position
+    }
+
+    fn selected_track(&self) -> Option<(Ulid, TrackZone)> {
+        self.selected_track
+            .and_then(|id| {
+                self.tracks
+                    .iter()
+                    .find(|(track_id, _)| **track_id == id)
+                    .map(|(id, track)| (*id, track.clone()))
+            })
     }
 }
 

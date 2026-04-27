@@ -66,8 +66,19 @@ impl Scene {
                                 },
                                 id,
                             ));
-                            let select_task = Task::done(Message::Soundscape(soundscape::Message::TrackSelected(Some(id))));
+                            let select_task = Task::done(Message::Soundscape(
+                                soundscape::Message::TrackSelected(Some(id)),
+                            ));
                             move_task.chain(select_task)
+                        }
+                        soundscape::Action::ResizeTrack(id, new_radius) => {
+                            Task::done(Message::Track(
+                                track::Message::Resized {
+                                    new_radius,
+                                    listener_position: self.soundscape.listener_position(),
+                                },
+                                id,
+                            ))
                         }
                         soundscape::Action::MoveListener(new_position) => {
                             let tasks = self.tracks.keys().map(|id| {
@@ -82,14 +93,12 @@ impl Scene {
                             deselected,
                             selected,
                         } => {
-                            let deselected = deselected
-                                .map_or_else(Task::none, |id| {
-                                    Task::done(Message::Track(track::Message::Selected(false), id))
-                                });
-                            let selected = selected
-                                .map_or_else(Task::none, |id| {
-                                    Task::done(Message::Track(track::Message::Selected(true), id))
-                                });
+                            let deselected = deselected.map_or_else(Task::none, |id| {
+                                Task::done(Message::Track(track::Message::Selected(false), id))
+                            });
+                            let selected = selected.map_or_else(Task::none, |id| {
+                                Task::done(Message::Track(track::Message::Selected(true), id))
+                            });
                             deselected.chain(selected)
                         }
                     }

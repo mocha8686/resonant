@@ -40,6 +40,10 @@ pub enum Message {
         new_position: Vector2,
         listener_position: Vector2,
     },
+    Resized {
+        new_radius: f32,
+        listener_position: Vector2,
+    },
     WillRemove,
 }
 
@@ -188,6 +192,11 @@ impl Track {
                 listener_position,
             } => {
                 self.position = new_position;
+                self.recalculate_volume(listener_position);
+                None
+            }
+            Message::Resized { new_radius, listener_position } => {
+                self.radius = new_radius;
                 self.recalculate_volume(listener_position);
                 None
             }

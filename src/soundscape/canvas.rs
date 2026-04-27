@@ -1,4 +1,7 @@
-use std::{cmp::max_by_key, f32::consts::{FRAC_PI_4, FRAC_PI_8}};
+use std::{
+    cmp::max_by_key,
+    f32::consts::{FRAC_PI_4, FRAC_PI_8},
+};
 
 use iced::{
     Event, Rectangle, Renderer, Theme, Vector,
@@ -27,6 +30,10 @@ pub enum State {
         id: Ulid,
         cursor_start: Vector2,
         original_position: Vector2,
+    },
+    ResizingTrack {
+        id: Ulid,
+        track_position: Vector2,
     },
 }
 
@@ -189,7 +196,17 @@ impl Soundscape {
         original_position: Vector2,
     ) -> canvas::Action<Message> {
         let new_position = original_position + delta / self.scale;
-        canvas::Action::publish(Message::TrackMoved { id, new_position })
+        canvas::Action::publish(Message::TrackMoved { id, new_position }).and_capture()
+    }
+
+    fn calculate_track_resize(
+        id: Ulid,
+        cursor_pos: Vector2,
+        track_position: Vector2,
+    ) -> canvas::Action<Message> {
+        let delta = cursor_pos - track_position;
+        let new_radius = delta.magnitude();
+        canvas::Action::publish(Message::TrackResized { id, new_radius }).and_capture()
     }
 
     fn find_track_at_point(&self, point: Vector2) -> Option<&super::TrackZone> {
@@ -215,10 +232,20 @@ impl Soundscape {
                         return None;
                     }
 
+                    let world_cursor_pos = self.screen_to_world(cursor_pos, bounds.center().into());
+
                     let position = Vector2::from(position);
                     let world_position = self.screen_to_world(position, bounds.center().into());
 
-                    if let Some(track) = self.find_track_at_point(world_position) {
+                    if let Some((id, track)) = self.selected_track()
+                        && dbg!(track.is_on_border(world_cursor_pos))
+                    {
+                        *state = State::ResizingTrack {
+                            id,
+                            track_position: track.position,
+                        };
+                        Some(Self::calculate_track_resize(id, world_position, track.position))
+                    } else if let Some(track) = self.find_track_at_point(world_position) {
                         let id = track.id;
                         *state = State::MovingTrack {
                             id,
@@ -248,6 +275,10 @@ impl Soundscape {
                 } => {
                     let delta = Vector2::from(position) - *cursor_start;
                     Some(self.calculate_track_move(*id, delta, *original_position))
+                }
+                State::ResizingTrack { id, track_position } => {
+                    let cursor_pos = self.screen_to_world(position.into(), bounds.center().into());
+                    Some(Self::calculate_track_resize(*id, cursor_pos, *track_position))
                 }
             },
             mouse::Event::ButtonPressed(mouse::Button::Left)
@@ -284,15 +315,21 @@ impl Soundscape {
                         Some(action)
                     }
                 },
-                State::MovingTrack { .. } => None,
+                _ => None,
             },
             _ => None,
         }
     }
 
-    fn handle_default_mouse_interaction(&self, bounds: Rectangle, cursor_pos: Vector2) -> mouse::Interaction {
+    fn handle_default_mouse_interaction(
+        &self,
+        bounds: Rectangle,
+        cursor_pos: Vector2,
+    ) -> mouse::Interaction {
         let position = self.screen_to_world(cursor_pos, bounds.center().into());
-        if let Some(track) = self.tracks.values().find(|t| t.is_on_border(position)) {
+        if let Some((_, track)) = self.selected_track()
+            && track.is_on_border(position)
+        {
             let mut delta = position - track.position;
             if delta.y >= 0.0 {
                 delta.x *= -1.0;
@@ -316,7 +353,6 @@ impl Soundscape {
             } else {
                 mouse::Interaction::ResizingHorizontally
             }
-
         } else {
             mouse::Interaction::None
         }
@@ -436,8 +472,12 @@ impl canvas::Program<Message> for Soundscape {
         cursor: mouse::Cursor,
     ) -> mouse::Interaction {
         match state {
-            State::None if let Some(cursor_pos) = cursor.position() => self.handle_default_mouse_interaction(bounds, cursor_pos.into()),
-            State::Pending { cursor_pos } => self.handle_default_mouse_interaction(bounds, *cursor_pos),
+            State::None if let Some(cursor_pos) = cursor.position() => {
+                self.handle_default_mouse_interaction(bounds, cursor_pos.into())
+            }
+            State::Pending { cursor_pos } => {
+                self.handle_default_mouse_interaction(bounds, *cursor_pos)
+            }
             _ => mouse::Interaction::None,
         }
     }
