@@ -46,12 +46,11 @@ impl Soundscape {
     }
 
     pub(super) fn calculate_track_move(
-        &self,
         id: Ulid,
-        delta: Vector2,
+        cursor_delta: Vector2,
         original_position: Vector2,
     ) -> canvas::Action<Message> {
-        let new_position = original_position + delta / self.scale;
+        let new_position = original_position + cursor_delta;
         canvas::Action::publish(Message::TrackMoved { id, new_position }).and_capture()
     }
 
