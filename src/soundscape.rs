@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, VecDeque},
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use iced::{Element, Length::Fill, Subscription, window};
@@ -137,20 +137,25 @@ impl Soundscape {
                 None
             }
             Message::NewFrame(instant) => {
-                let dt = instant - self.current;
-                self.current = instant;
+                let fixed_delta = Duration::from_secs_f32(1.0 / 60.0);
 
-                if let Some(next_waypoint) = self.waypoints.front() {
-                    let velocity =
-                        (*next_waypoint - self.listener.position).normalized() * Self::SPEED;
-                    let dv = velocity * dt.as_secs_f32();
-                    self.listener.position += dv;
+                if instant - self.current >= fixed_delta {
+                    while instant - self.current >= fixed_delta {
+                        self.current += fixed_delta;
 
-                    while let Some(next_waypoint) = self.waypoints.front()
-                        && (*next_waypoint - self.listener.position).square_magnitude()
-                            < dv.square_magnitude()
-                    {
-                        self.waypoints.pop_front();
+                        if let Some(next_waypoint) = self.waypoints.front() {
+                            let velocity = (*next_waypoint - self.listener.position).normalized()
+                                * Self::SPEED;
+                            let dv = velocity * fixed_delta.as_secs_f32();
+                            self.listener.position += dv;
+
+                            while let Some(next_waypoint) = self.waypoints.front()
+                                && (*next_waypoint - self.listener.position).square_magnitude()
+                                    < dv.square_magnitude()
+                            {
+                                self.waypoints.pop_front();
+                            }
+                        }
                     }
 
                     Some(Action::MoveListener(self.listener.position))
