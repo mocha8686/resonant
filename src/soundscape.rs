@@ -66,6 +66,14 @@ struct TrackZone {
 }
 
 impl TrackZone {
+    const BORDER_WIDTH: f32 = 5.0;
+
+    fn is_on_border(&self, point: Vector2) -> bool {
+        let delta = self.position - point;
+        let threshold = (delta.magnitude() - self.radius).abs();
+        threshold <= Self::BORDER_WIDTH
+    }
+
     fn contains(&self, point: Vector2) -> bool {
         let delta = self.position - point;
         delta.square_magnitude() <= self.radius * self.radius

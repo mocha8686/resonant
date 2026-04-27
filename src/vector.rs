@@ -28,6 +28,10 @@ where
     pub fn square_magnitude(self) -> T {
         self.x * self.x + self.y * self.y
     }
+
+    pub fn dot(self, other: Self) -> T {
+        self.x * other.x + self.y * other.y
+    }
 }
 
 impl Vector2<f32> {
