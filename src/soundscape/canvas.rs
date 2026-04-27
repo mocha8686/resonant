@@ -1,12 +1,7 @@
-use std::{
-    f32::consts::{FRAC_PI_4, FRAC_PI_8},
-};
-
 use iced::{
     Event, Rectangle, Renderer, Theme, Vector,
     alignment::Vertical,
     keyboard,
-    mouse::{self, Cursor},
     widget::{canvas, text::Alignment},
 };
 use ulid::Ulid;
@@ -14,6 +9,7 @@ use ulid::Ulid;
 use super::{Message, Soundscape};
 use crate::Vector2;
 
+mod mouse;
 mod grid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -116,159 +112,6 @@ impl Soundscape {
     fn find_track_at_point(&self, point: Vector2) -> Option<&super::TrackZone> {
         self.tracks.values().find(|t| t.contains(point))
     }
-
-    fn handle_mouse_event(
-        &self,
-        state: &mut State,
-        event: &mouse::Event,
-        bounds: Rectangle,
-        cursor: Cursor,
-    ) -> Option<canvas::Action<Message>> {
-        match event {
-            mouse::Event::CursorMoved { position } => match state {
-                State::None => None,
-                State::Pending { cursor_pos } => {
-                    let cursor_pos = *cursor_pos;
-                    let delta = cursor_pos - position.into();
-                    if delta.square_magnitude()
-                        <= Self::CURSOR_MOVE_THRESHOLD * Self::CURSOR_MOVE_THRESHOLD
-                    {
-                        return None;
-                    }
-
-                    let world_cursor_pos = self.screen_to_world(cursor_pos, bounds.center().into());
-
-                    let position = Vector2::from(position);
-                    let world_position = self.screen_to_world(position, bounds.center().into());
-
-                    if let Some((id, track)) = self.selected_track()
-                        && track.is_on_border(world_cursor_pos)
-                    {
-                        *state = State::ResizingTrack {
-                            id,
-                            track_position: track.position,
-                        };
-                        Some(Self::calculate_track_resize(
-                            id,
-                            world_position,
-                            track.position,
-                        ))
-                    } else if let Some(track) = self.find_track_at_point(world_position) {
-                        let id = track.id;
-                        *state = State::MovingTrack {
-                            id,
-                            cursor_start: cursor_pos,
-                            original_position: track.position,
-                        };
-                        Some(self.calculate_track_move(id, position - cursor_pos, track.position))
-                    } else {
-                        *state = State::Panning {
-                            cursor_start: cursor_pos,
-                            original_position: self.camera,
-                        };
-                        Some(self.calculate_pan(position - cursor_pos, self.camera))
-                    }
-                }
-                State::Panning {
-                    cursor_start,
-                    original_position,
-                } => {
-                    let delta = Vector2::from(position) - *cursor_start;
-                    Some(self.calculate_pan(delta, *original_position))
-                }
-                State::MovingTrack {
-                    id,
-                    cursor_start,
-                    original_position,
-                } => {
-                    let delta = Vector2::from(position) - *cursor_start;
-                    Some(self.calculate_track_move(*id, delta, *original_position))
-                }
-                State::ResizingTrack { id, track_position } => {
-                    let cursor_pos = self.screen_to_world(position.into(), bounds.center().into());
-                    Some(Self::calculate_track_resize(
-                        *id,
-                        cursor_pos,
-                        *track_position,
-                    ))
-                }
-            },
-            mouse::Event::ButtonPressed(mouse::Button::Left)
-                if !cursor.is_levitating()
-                    && let Some(position) = cursor.position() =>
-            {
-                *state = State::Pending {
-                    cursor_pos: position.into(),
-                };
-                None
-            }
-            mouse::Event::ButtonReleased(mouse::Button::Left) => {
-                let action = match state {
-                    State::Pending { cursor_pos } => {
-                        let id = self
-                            .find_track_at_point(
-                                self.screen_to_world(*cursor_pos, bounds.center().into()),
-                            )
-                            .map(|t| t.id);
-                        Some(canvas::Action::publish(Message::TrackSelected(id)))
-                    }
-                    _ => None,
-                };
-                *state = State::None;
-                action
-            }
-            mouse::Event::WheelScrolled { delta } if !cursor.is_levitating() => match state {
-                State::None | State::Pending { .. } | State::Panning { .. } => match *delta {
-                    mouse::ScrollDelta::Lines { y, .. } | mouse::ScrollDelta::Pixels { y, .. } => {
-                        let action = self.calculate_zoom(
-                            cursor.position_from(bounds.center()).map(Vector2::from),
-                            y,
-                        );
-                        Some(action)
-                    }
-                },
-                _ => None,
-            },
-            _ => None,
-        }
-    }
-
-    fn handle_default_mouse_interaction(
-        &self,
-        bounds: Rectangle,
-        cursor_pos: Vector2,
-    ) -> mouse::Interaction {
-        let position = self.screen_to_world(cursor_pos, bounds.center().into());
-        if let Some((_, track)) = self.selected_track()
-            && track.is_on_border(position)
-        {
-            let mut delta = position - track.position;
-            if delta.y >= 0.0 {
-                delta.x *= -1.0;
-            }
-            let res = delta.normalized().dot(Vector2::RIGHT).acos();
-            // res ∈ [0, π]
-
-            let a = FRAC_PI_8;
-            let b = a + FRAC_PI_4;
-            let c = b + FRAC_PI_4;
-            let d = c + FRAC_PI_4;
-
-            if res <= a {
-                mouse::Interaction::ResizingHorizontally
-            } else if res <= b {
-                mouse::Interaction::ResizingDiagonallyUp
-            } else if res <= c {
-                mouse::Interaction::ResizingVertically
-            } else if res <= d {
-                mouse::Interaction::ResizingDiagonallyDown
-            } else {
-                mouse::Interaction::ResizingHorizontally
-            }
-        } else {
-            mouse::Interaction::None
-        }
-    }
 }
 
 impl canvas::Program<Message> for Soundscape {
@@ -280,7 +123,7 @@ impl canvas::Program<Message> for Soundscape {
         renderer: &Renderer,
         theme: &Theme,
         bounds: Rectangle,
-        _cursor: Cursor,
+        _cursor: iced::mouse::Cursor,
     ) -> Vec<canvas::Geometry<Renderer>> {
         let mut frame = canvas::Frame::new(renderer, bounds.size());
         let center_origin_transform = Vector::new(bounds.width, bounds.height) / 2.0;
@@ -356,7 +199,7 @@ impl canvas::Program<Message> for Soundscape {
         state: &mut Self::State,
         event: &Event,
         bounds: Rectangle,
-        cursor: mouse::Cursor,
+        cursor: iced::mouse::Cursor,
     ) -> Option<canvas::Action<Message>> {
         match event {
             Event::Mouse(event) => self.handle_mouse_event(state, event, bounds, cursor),
@@ -381,8 +224,8 @@ impl canvas::Program<Message> for Soundscape {
         &self,
         state: &Self::State,
         bounds: Rectangle,
-        cursor: mouse::Cursor,
-    ) -> mouse::Interaction {
+        cursor: iced::mouse::Cursor,
+    ) -> iced::mouse::Interaction {
         match state {
             State::None if let Some(cursor_pos) = cursor.position() => {
                 self.handle_default_mouse_interaction(bounds, cursor_pos.into())
@@ -390,7 +233,7 @@ impl canvas::Program<Message> for Soundscape {
             State::Pending { cursor_pos } => {
                 self.handle_default_mouse_interaction(bounds, *cursor_pos)
             }
-            _ => mouse::Interaction::None,
+            _ => iced::mouse::Interaction::None,
         }
     }
 }
