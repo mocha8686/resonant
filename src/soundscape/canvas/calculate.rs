@@ -9,7 +9,11 @@ impl Soundscape {
     const MAX_SCALE: f32 = 2.0;
     const SCROLL_SENSITIVITY: f32 = 1.0 / 100.0;
 
-    pub(super) fn calculate_pan(&self, delta: Vector2, original_position: Vector2) -> canvas::Action<Message> {
+    pub(super) fn calculate_pan(
+        &self,
+        delta: Vector2,
+        original_position: Vector2,
+    ) -> canvas::Action<Message> {
         let new_position = original_position + delta / self.scale;
         canvas::Action::publish(Message::Translated { new_position }).and_capture()
     }
@@ -58,6 +62,6 @@ impl Soundscape {
     ) -> canvas::Action<Message> {
         let delta = cursor_pos - track_position;
         let new_radius = delta.magnitude();
-        canvas ::Action::publish(Message::TrackResized { id, new_radius }).and_capture()
+        canvas::Action::publish(Message::TrackResized { id, new_radius }).and_capture()
     }
 }

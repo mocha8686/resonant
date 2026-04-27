@@ -89,8 +89,7 @@ impl Soundscape {
                 Some(self.calculate_track_move(*id, delta, *original_position))
             }
             State::ResizingTrack { id, track_position } => {
-                let cursor_pos =
-                    self.screen_to_world(cursor_current, bounds.center().into());
+                let cursor_pos = self.screen_to_world(cursor_current, bounds.center().into());
                 Some(Self::calculate_track_resize(
                     *id,
                     cursor_pos,
@@ -180,5 +179,4 @@ impl Soundscape {
             mouse::Interaction::None
         }
     }
-
 }

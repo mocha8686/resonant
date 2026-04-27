@@ -9,9 +9,9 @@ use ulid::Ulid;
 use super::{Message, Soundscape};
 use crate::Vector2;
 
-mod mouse;
-mod grid;
 mod calculate;
+mod grid;
+mod mouse;
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum State {
