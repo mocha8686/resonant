@@ -175,6 +175,8 @@ impl Soundscape {
             } else {
                 mouse::Interaction::ResizingHorizontally
             }
+        } else if self.find_track_at_point(position).is_some() {
+            mouse::Interaction::Pointer
         } else {
             mouse::Interaction::None
         }

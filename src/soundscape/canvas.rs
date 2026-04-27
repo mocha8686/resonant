@@ -175,6 +175,8 @@ impl canvas::Program<Message> for Soundscape {
             State::Pending { cursor_pos } => {
                 self.handle_default_mouse_interaction(bounds, *cursor_pos)
             }
+            State::Panning { .. } => iced::mouse::Interaction::Move,
+            State::MovingTrack { .. } => iced::mouse::Interaction::Grabbing,
             _ => iced::mouse::Interaction::None,
         }
     }
