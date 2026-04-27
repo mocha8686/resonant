@@ -244,7 +244,11 @@ impl Soundscape {
                             id,
                             track_position: track.position,
                         };
-                        Some(Self::calculate_track_resize(id, world_position, track.position))
+                        Some(Self::calculate_track_resize(
+                            id,
+                            world_position,
+                            track.position,
+                        ))
                     } else if let Some(track) = self.find_track_at_point(world_position) {
                         let id = track.id;
                         *state = State::MovingTrack {
@@ -278,7 +282,11 @@ impl Soundscape {
                 }
                 State::ResizingTrack { id, track_position } => {
                     let cursor_pos = self.screen_to_world(position.into(), bounds.center().into());
-                    Some(Self::calculate_track_resize(*id, cursor_pos, *track_position))
+                    Some(Self::calculate_track_resize(
+                        *id,
+                        cursor_pos,
+                        *track_position,
+                    ))
                 }
             },
             mouse::Event::ButtonPressed(mouse::Button::Left)

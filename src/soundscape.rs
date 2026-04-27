@@ -233,13 +233,12 @@ impl Soundscape {
     }
 
     fn selected_track(&self) -> Option<(Ulid, TrackZone)> {
-        self.selected_track
-            .and_then(|id| {
-                self.tracks
-                    .iter()
-                    .find(|(track_id, _)| **track_id == id)
-                    .map(|(id, track)| (*id, track.clone()))
-            })
+        self.selected_track.and_then(|id| {
+            self.tracks
+                .iter()
+                .find(|(track_id, _)| **track_id == id)
+                .map(|(id, track)| (*id, track.clone()))
+        })
     }
 }
 

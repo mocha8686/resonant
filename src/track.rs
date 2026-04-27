@@ -195,7 +195,10 @@ impl Track {
                 self.recalculate_volume(listener_position);
                 None
             }
-            Message::Resized { new_radius, listener_position } => {
+            Message::Resized {
+                new_radius,
+                listener_position,
+            } => {
                 self.radius = new_radius;
                 self.recalculate_volume(listener_position);
                 None
