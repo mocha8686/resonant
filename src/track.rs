@@ -89,7 +89,7 @@ impl Track {
         easing: Easing::Linear,
     };
     const ATTENUATION_STRENGTH: f64 = 10.0;
-    const DEFAULT_RADIUS: f32 = 500.0;
+    const DEFAULT_RADIUS: f32 = 200.0;
 
     pub fn new(id: Ulid, original_path: &Path) -> Result<Self> {
         let name = original_path
