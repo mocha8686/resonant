@@ -6,6 +6,8 @@ use super::{Message, Soundscape, State};
 use crate::Vector2;
 
 impl Soundscape {
+    const CURSOR_MOVE_THRESHOLD: f32 = 5.0;
+
     pub(super) fn handle_mouse_event(
         &self,
         state: &mut State,
@@ -178,4 +180,5 @@ impl Soundscape {
             mouse::Interaction::None
         }
     }
+
 }
