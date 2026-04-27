@@ -142,7 +142,7 @@ impl Soundscape {
                     let world_position = self.screen_to_world(position, bounds.center().into());
 
                     if let Some((id, track)) = self.selected_track()
-                        && dbg!(track.is_on_border(world_cursor_pos))
+                        && track.is_on_border(world_cursor_pos)
                     {
                         *state = State::ResizingTrack {
                             id,
