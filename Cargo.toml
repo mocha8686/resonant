@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.102"
+blake3 = { version = "1.8.5", features = ["serde"] }
 directories = "6.0.0"
 futures-time = "3.0.1"
 iced = { version = "0.14.0", features = ["canvas", "svg"] }
