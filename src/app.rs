@@ -2,6 +2,7 @@ use std::fs::File;
 
 use crate::{
     PROJECT_DIRS,
+    audio_cache::AudioCache,
     scene::{self, Scene, SceneData},
 };
 use iced::{
@@ -11,6 +12,7 @@ use iced::{
     widget::{button, column, container, row, text},
 };
 use rfd::FileDialog;
+use ulid::Ulid;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
@@ -23,6 +25,7 @@ pub enum Message {
 pub struct App {
     scenes: Vec<Scene>,
     active_index: usize,
+    audio_cache: AudioCache,
 }
 
 impl Default for App {
@@ -30,6 +33,7 @@ impl Default for App {
         Self {
             scenes: vec![Scene::default()],
             active_index: 0,
+            audio_cache: AudioCache::new(),
         }
     }
 }
@@ -39,7 +43,41 @@ impl App {
 
     pub fn update(&mut self, msg: Message) -> Task<Message> {
         match msg {
-            Message::Scene(msg) => self.active_scene_mut().update(msg).map(Message::Scene),
+            Message::Scene(msg) => {
+                if let Some(action) = self.active_scene_mut().update(msg) {
+                    match action {
+                        scene::Action::Run(task) => task.map(Message::Scene),
+                        scene::Action::AddTrack => {
+                            if let Some(path) = FileDialog::new()
+                                .add_filter("audio", &["flac", "mp3", "ogg", "wav", "webm"])
+                                .pick_file()
+                            {
+                                let name =
+                                    path.file_stem().map_or("Unknown filename".into(), |s| {
+                                        s.to_string_lossy().to_string()
+                                    });
+                                let mut file = File::open_buffered(&path)
+                                    .expect("should be able to open audio file");
+
+                                let data = self
+                                    .audio_cache
+                                    .get_or_register(&mut file)
+                                    .expect("should be able to register new audio");
+
+                                let id = Ulid::new();
+                                let msg =
+                                    Message::Scene(scene::Message::TrackAdded { id, name, data });
+
+                                Task::done(msg)
+                            } else {
+                                Task::none()
+                            }
+                        }
+                    }
+                } else {
+                    Task::none()
+                }
+            }
             Message::SwitchScene(index) => {
                 self.active_index = index;
                 Task::none()
@@ -63,7 +101,7 @@ impl App {
                         .with_file_name(path.file_name().unwrap());
 
                     {
-                        let data = SceneData::try_from(self.active_scene())
+                        let data = SceneData::new(self.active_scene(), &self.audio_cache)
                             .expect("should be able to convert scene to data");
 
                         let mut swapfile = File::create_buffered(&swapfile_path)
@@ -89,10 +127,9 @@ impl App {
                     let data: SceneData = rmp_serde::decode::from_read(file)
                         .expect("should be able to read scene data");
 
-                    let scene: Scene = data
-                        .with_name(&scene_name)
-                        .try_into()
-                        .expect("should be able to load scene from data");
+                    let scene: Scene =
+                        Scene::from_data(data.with_name(&scene_name), &mut self.audio_cache)
+                            .expect("should be able to load scene from data");
 
                     self.scenes.push(scene);
 

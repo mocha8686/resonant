@@ -1,4 +1,7 @@
+use std::sync::Arc;
+
 use crate::{
+    audio_cache::AudioData,
     soundscape::{self, Soundscape},
     track::{self, Track},
 };
@@ -7,7 +10,6 @@ use iced::{
     widget::{button, column, container, stack, text},
 };
 use ordermap::OrderMap;
-use rfd::FileDialog;
 use ulid::Ulid;
 
 mod serde_impl;
@@ -18,7 +20,18 @@ pub enum Message {
     Track(track::Message, Ulid),
     Soundscape(soundscape::Message),
     AddTrack,
+    TrackAdded {
+        id: Ulid,
+        name: String,
+        data: Arc<AudioData>,
+    },
     Loaded,
+}
+
+#[derive(Debug)]
+pub enum Action {
+    Run(Task<Message>),
+    AddTrack,
 }
 
 pub struct Scene {
@@ -38,21 +51,27 @@ impl Default for Scene {
 }
 
 impl Scene {
-    pub fn update(&mut self, msg: Message) -> Task<Message> {
+    pub fn update(&mut self, msg: Message) -> Option<Action> {
         match msg {
             Message::Track(msg, id) => {
                 if let Some(track) = self.tracks.get_mut(&id)
                     && let Some(action) = track.update(msg)
                 {
                     match action {
-                        track::Action::Run(task) => task.map(move |msg| Message::Track(msg, id)),
+                        track::Action::Run(task) => {
+                            let task = task.map(move |msg| Message::Track(msg, id));
+                            Some(Action::Run(task))
+                        }
                         track::Action::Remove => {
                             self.tracks.remove(&id);
-                            Task::done(Message::Soundscape(soundscape::Message::TrackRemoved(id)))
+                            let task = Task::done(Message::Soundscape(
+                                soundscape::Message::TrackRemoved(id),
+                            ));
+                            Some(Action::Run(task))
                         }
                     }
                 } else {
-                    Task::none()
+                    None
                 }
             }
             Message::Soundscape(msg) => {
@@ -69,16 +88,17 @@ impl Scene {
                             let select_task = Task::done(Message::Soundscape(
                                 soundscape::Message::TrackSelected(Some(id)),
                             ));
-                            move_task.chain(select_task)
+                            Some(Action::Run(move_task.chain(select_task)))
                         }
                         soundscape::Action::ResizeTrack(id, new_radius) => {
-                            Task::done(Message::Track(
+                            let task = Task::done(Message::Track(
                                 track::Message::Resized {
                                     new_radius,
                                     listener_position: self.soundscape.listener_position(),
                                 },
                                 id,
-                            ))
+                            ));
+                            Some(Action::Run(task))
                         }
                         soundscape::Action::MoveListener(new_position) => {
                             let tasks = self.tracks.keys().map(|id| {
@@ -87,7 +107,7 @@ impl Scene {
                                     *id,
                                 ))
                             });
-                            Task::batch(tasks)
+                            Some(Action::Run(Task::batch(tasks)))
                         }
                         soundscape::Action::ChangeSelection {
                             deselected,
@@ -99,27 +119,19 @@ impl Scene {
                             let selected = selected.map_or_else(Task::none, |id| {
                                 Task::done(Message::Track(track::Message::Selected(true), id))
                             });
-                            deselected.chain(selected)
+                            Some(Action::Run(deselected.chain(selected)))
                         }
                     }
                 } else {
-                    Task::none()
+                    None
                 }
             }
-            Message::AddTrack => {
-                if let Some(path) = FileDialog::new()
-                    .add_filter("audio", &["flac", "mp3", "ogg", "wav", "webm"])
-                    .pick_file()
-                {
-                    let track =
-                        Track::new(Ulid::new(), &path).expect("should be able to create track");
-                    let task = Task::done(Message::Soundscape((&track).into()));
-                    self.tracks.insert(track.id(), track);
-
-                    task
-                } else {
-                    Task::none()
-                }
+            Message::AddTrack => Some(Action::AddTrack),
+            Message::TrackAdded { id, name, data } => {
+                let track = Track::new(id, name, data).expect("should be able to create track");
+                let task = Task::done(Message::Soundscape((&track).into()));
+                self.tracks.insert(track.id(), track);
+                Some(Action::Run(task))
             }
             Message::Loaded => {
                 let tasks = self.tracks.keys().map(|id| {
@@ -128,7 +140,7 @@ impl Scene {
                         *id,
                     ))
                 });
-                Task::batch(tasks)
+                Some(Action::Run(Task::batch(tasks)))
             }
         }
     }

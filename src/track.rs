@@ -1,7 +1,4 @@
-use std::{
-    path::{Path, PathBuf},
-    time::Duration,
-};
+use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
 use iced::{
@@ -10,14 +7,15 @@ use iced::{
 };
 use kira::{
     AudioManager, AudioManagerSettings, Decibels, Easing, StartTime, Tween, Tweenable,
-    sound::{
-        PlaybackPosition, PlaybackState, Region,
-        streaming::{StreamingSoundData, StreamingSoundHandle},
-    },
+    sound::{PlaybackPosition, PlaybackState, Region},
 };
 use ulid::Ulid;
 
-use crate::{PROJECT_DIRS, Vector2, components::Toggle};
+use crate::{
+    Vector2,
+    audio_cache::{AudioData, FileHash, FileStreamingSoundData, FileStreamingSoundHandle},
+    components::Toggle,
+};
 use looping::Loop;
 use play_pause::PlayPause;
 use progress::Progress;
@@ -53,13 +51,10 @@ pub enum Action {
     Remove,
 }
 
-type FileStreamingSoundData = StreamingSoundData<kira::sound::FromFileError>;
-type FileStreamingSoundHandle = StreamingSoundHandle<kira::sound::FromFileError>;
-
 pub struct Track {
     id: Ulid,
     name: String,
-    path: PathBuf,
+    audio_data: Arc<AudioData>,
     position: Vector2,
     radius: f32,
     selected: bool,
@@ -95,38 +90,21 @@ impl Track {
     const ATTENUATION_STRENGTH: f64 = 10.0;
     const DEFAULT_RADIUS: f32 = 200.0;
 
-    pub fn new(id: Ulid, original_path: &Path) -> Result<Self> {
-        let name = original_path
-            .with_extension("")
-            .file_name()
-            .map_or("Unknown filename".into(), |s| {
-                s.to_string_lossy().to_string()
-            });
-
+    pub fn new(id: Ulid, name: String, data: Arc<AudioData>) -> Result<Self> {
         let manager = AudioManager::new(AudioManagerSettings::default())?;
 
-        let cache_dir = PROJECT_DIRS.cache_dir();
-
-        std::fs::create_dir_all(cache_dir)?;
-        let cache_dest = cache_dir.join(id.to_string()).with_extension(
-            original_path
-                .extension()
-                .expect("file should have extension"),
-        );
-        std::fs::copy(original_path, &cache_dest)?;
-
-        let data = FileStreamingSoundData::from_file(&cache_dest)?;
-        let duration = data.unsliced_duration().as_secs_f32();
+        let stream = data.load()?;
+        let duration = stream.unsliced_duration().as_secs_f32();
 
         Ok(Self {
             id,
             name,
-            path: cache_dest,
+            audio_data: data,
             position: Vector2::default(),
             radius: Self::DEFAULT_RADIUS,
             selected: false,
             manager,
-            handle: Handle::Uninitialized(Some(data)),
+            handle: Handle::Uninitialized(Some(stream)),
             progress: Progress::new(duration),
             play_pause: PlayPause::new(),
             looping: Loop::new(),
@@ -283,10 +261,12 @@ impl Track {
             None
         };
 
-        let data = FileStreamingSoundData::from_file(&self.path)?
+        let stream = self
+            .audio_data
+            .load()?
             .loop_region(loop_region)
             .start_position(self.progress.offset());
-        self.handle = Handle::Uninitialized(Some(data));
+        self.handle = Handle::Uninitialized(Some(stream));
 
         let Handle::Uninitialized(Some(data)) = &mut self.handle else {
             unreachable!()
@@ -327,10 +307,8 @@ impl Track {
     pub fn radius(&self) -> f32 {
         self.radius
     }
-}
 
-impl Drop for Track {
-    fn drop(&mut self) {
-        std::fs::remove_file(&self.path).ok();
+    pub fn hash(&self) -> FileHash {
+        self.audio_data.hash()
     }
 }

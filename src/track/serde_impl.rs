@@ -1,66 +1,55 @@
-use std::ffi::OsString;
+use std::sync::Arc;
 
+use anyhow::Result;
 use kira::{AudioManager, AudioManagerSettings};
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
-use super::{
-    FileStreamingSoundData, Handle, Track, looping::Loop, play_pause::PlayPause, progress::Progress,
+use super::{Handle, Track, looping::Loop, play_pause::PlayPause, progress::Progress};
+use crate::{
+    Vector2,
+    audio_cache::{AudioData, FileHash},
 };
-use crate::{PROJECT_DIRS, Vector2};
 
 #[derive(Serialize, Deserialize)]
 pub struct TrackData {
     id: Ulid,
     name: String,
-    extension: OsString,
-    audio_data: Vec<u8>,
+    hash: FileHash,
     position: Vector2,
     radius: f32,
     duration: f32,
 }
 
-impl TryFrom<&Track> for TrackData {
-    type Error = anyhow::Error;
-
-    fn try_from(track: &Track) -> Result<Self, Self::Error> {
-        let audio_data = std::fs::read(&track.path)?;
-
-        let extension = track.path.extension().unwrap().to_os_string();
-
-        Ok(Self {
+impl TrackData {
+    pub fn new(track: &Track) -> Self {
+        Self {
             id: track.id,
             name: track.name.clone(),
-            extension,
-            audio_data,
+            hash: track.hash(),
             position: track.position,
             radius: track.radius,
             duration: track.progress.duration(),
-        })
+        }
+    }
+
+    #[must_use]
+    pub fn hash(&self) -> FileHash {
+        self.hash
     }
 }
 
-impl TryFrom<TrackData> for Track {
-    type Error = anyhow::Error;
-
-    fn try_from(track_data: TrackData) -> Result<Self, Self::Error> {
+impl Track {
+    pub fn from_data(track_data: TrackData, audio_data: Arc<AudioData>) -> Result<Self> {
         let manager = AudioManager::new(AudioManagerSettings::default())?;
 
-        let cache_dir = PROJECT_DIRS.cache_dir();
-
-        std::fs::create_dir_all(cache_dir)?;
-        let cache_dest = cache_dir
-            .join(track_data.id.to_string())
-            .with_extension(track_data.extension);
-        std::fs::write(&cache_dest, &track_data.audio_data)?;
-
-        let data = FileStreamingSoundData::from_file(&cache_dest)?;
+        let data = audio_data.load()?;
         let duration = data.unsliced_duration().as_secs_f32();
 
         Ok(Track {
             id: track_data.id,
             name: track_data.name,
-            path: cache_dest,
+            audio_data,
             position: track_data.position,
             radius: track_data.radius,
             selected: false,
