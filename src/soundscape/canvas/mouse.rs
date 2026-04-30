@@ -85,7 +85,8 @@ impl Soundscape {
                 cursor_start,
                 original_position,
             } => {
-                let delta = self.screen_to_world(cursor_current, bounds.center().into()) - *cursor_start;
+                let delta =
+                    self.screen_to_world(cursor_current, bounds.center().into()) - *cursor_start;
                 Some(Self::calculate_track_move(*id, delta, *original_position))
             }
             State::ResizingTrack { id, track_position } => {

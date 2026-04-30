@@ -30,10 +30,7 @@ impl AudioCache {
         Self::default()
     }
 
-    pub fn get_or_register<T: Read + Seek>(
-        &mut self,
-        data: &mut T,
-    ) -> Result<Arc<AudioData>> {
+    pub fn get_or_register<T: Read + Seek>(&mut self, data: &mut T) -> Result<Arc<AudioData>> {
         let hash = file_hash(data)?;
 
         if let Some(data) = self.handles.get(&hash) {
@@ -47,10 +44,7 @@ impl AudioCache {
             let mut file = File::create_buffered(cache_path)?;
             std::io::copy(data, &mut file)?;
 
-            let data = Arc::new(AudioData {
-                id,
-                hash,
-            });
+            let data = Arc::new(AudioData { id, hash });
 
             let data = self.handles.entry(hash).insert_entry(data);
             Ok(data.get().clone())
@@ -97,9 +91,7 @@ impl AudioData {
 }
 
 pub fn cache_path(id: Ulid) -> PathBuf {
-    PROJECT_DIRS
-        .cache_dir()
-        .join(id.to_string())
+    PROJECT_DIRS.cache_dir().join(id.to_string())
 }
 
 impl Drop for AudioData {
