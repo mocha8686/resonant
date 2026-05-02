@@ -163,11 +163,11 @@ impl Track {
                     looping::Action::Enable => {
                         info!("Enabling looping for track {}.", self.id.to_string());
                         Some((0.0..).into())
-                    },
+                    }
                     looping::Action::Disable => {
                         info!("Disabling looping for track {}.", self.id.to_string());
                         None
-                    },
+                    }
                 };
 
                 match &mut self.handle {

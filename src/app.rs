@@ -60,7 +60,8 @@ impl App {
                                 .add_filter("audio", &["flac", "mp3", "ogg", "wav", "webm"])
                                 .pick_file()
                             {
-                                let msg = self.add_track(&path).expect("should be able to add track");
+                                let msg =
+                                    self.add_track(&path).expect("should be able to add track");
                                 Task::done(msg)
                             } else {
                                 info!("Track load cancelled for current scene.");
@@ -88,7 +89,8 @@ impl App {
                     ))
                     .save_file()
                 {
-                    self.save_active_scene(path).expect("should be able to save current scene");
+                    self.save_active_scene(path)
+                        .expect("should be able to save current scene");
                 } else {
                     info!("Save cancelled.");
                 }
@@ -100,7 +102,9 @@ impl App {
                     .add_filter("resonant scene", &[Self::FILE_EXTENSION])
                     .pick_file()
                 {
-                    let scene = self.load_scene(&path).expect("should be able to load scene");
+                    let scene = self
+                        .load_scene(&path)
+                        .expect("should be able to load scene");
                     self.scenes.push(scene);
 
                     Task::done(Message::Scene(scene::Message::Loaded))
