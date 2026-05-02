@@ -10,6 +10,7 @@ use kira::{
     AudioManager, AudioManagerSettings, Decibels, Easing, StartTime, Tween, Tweenable,
     sound::{PlaybackPosition, PlaybackState, Region},
 };
+use log::{debug, info, trace};
 use ulid::Ulid;
 
 use crate::{
@@ -43,7 +44,7 @@ pub enum Message {
         new_radius: f32,
         listener_position: Vector2,
     },
-    WillRemove,
+    RemoveRequested,
 }
 
 #[derive(Debug)]
@@ -117,10 +118,12 @@ impl Track {
             Message::PlayPause(msg) => {
                 match self.play_pause.update(msg) {
                     play_pause::Action::Play => {
+                        info!("Playing track {}.", self.id.to_string());
                         self.play().expect("should be able to play");
                         self.progress.stop_seeking();
                     }
                     play_pause::Action::Pause => {
+                        info!("Pausing track {}.", self.id.to_string());
                         self.pause();
                     }
                 }
@@ -130,6 +133,11 @@ impl Track {
                 if let Some(action) = self.progress.update(msg, self.play_pause.is_on()) {
                     match action {
                         progress::Action::Release => {
+                            info!(
+                                "Seeking track {} to {:.2}s.",
+                                self.id.to_string(),
+                                self.progress.offset()
+                            );
                             if let Handle::Initialized(handle) = &mut self.handle {
                                 handle.seek_to(self.progress.offset());
                             } else {
@@ -137,7 +145,9 @@ impl Track {
                             }
 
                             let debounce = Task::perform(
-                                task::sleep(Duration::from_millis(Progress::DEBOUNCE_INTERVAL).into()),
+                                task::sleep(
+                                    Duration::from_millis(Progress::DEBOUNCE_INTERVAL).into(),
+                                ),
                                 |_| Message::Progress(progress::Message::Seeked),
                             );
 
@@ -150,8 +160,14 @@ impl Track {
             }
             Message::Loop(msg) => {
                 let loop_region: Option<Region> = match self.looping.update(msg) {
-                    looping::Action::Enable => Some((0.0..).into()),
-                    looping::Action::Disable => None,
+                    looping::Action::Enable => {
+                        info!("Enabling looping for track {}.", self.id.to_string());
+                        Some((0.0..).into())
+                    },
+                    looping::Action::Disable => {
+                        info!("Disabling looping for track {}.", self.id.to_string());
+                        None
+                    },
                 };
 
                 match &mut self.handle {
@@ -168,6 +184,11 @@ impl Track {
                 None
             }
             Message::Selected(selected) => {
+                if selected {
+                    debug!("Selecting track {}.", self.id.to_string());
+                } else {
+                    debug!("Deselecting track {}.", self.id.to_string());
+                }
                 self.selected = selected;
                 None
             }
@@ -175,6 +196,7 @@ impl Track {
                 new_position,
                 listener_position,
             } => {
+                trace!("Moving track {} to {new_position}.", self.id.to_string());
                 self.position = new_position;
                 self.recalculate_volume(listener_position);
                 None
@@ -183,6 +205,7 @@ impl Track {
                 new_radius,
                 listener_position,
             } => {
+                trace!("Resizing track {} to {new_radius}.", self.id.to_string());
                 self.radius = new_radius;
                 self.recalculate_volume(listener_position);
                 None
@@ -191,7 +214,7 @@ impl Track {
                 self.recalculate_volume(listener_position);
                 None
             }
-            Message::WillRemove => Some(Action::Remove),
+            Message::RemoveRequested => Some(Action::Remove),
         }
     }
 
@@ -210,7 +233,7 @@ impl Track {
             self.progress.view(position).map(Message::Progress),
             self.play_pause.view().map(Message::PlayPause),
             self.looping.view().map(Message::Loop),
-            button("-").on_press(Message::WillRemove),
+            button("-").on_press(Message::RemoveRequested),
         ];
 
         let style = if self.selected {

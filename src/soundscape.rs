@@ -4,6 +4,7 @@ use std::{
 };
 
 use iced::{Element, Length::Fill, Subscription, window};
+use log::{debug, info, trace};
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
@@ -123,6 +124,7 @@ impl Soundscape {
     pub fn update(&mut self, msg: Message) -> Option<Action> {
         match msg {
             Message::Translated { new_position } => {
+                trace!("Camera moved: {new_position}");
                 self.camera = new_position;
                 None
             }
@@ -130,46 +132,26 @@ impl Soundscape {
                 new_scale,
                 new_position,
             } => {
+                trace!(
+                    "Camera zoomed: scale: {new_scale}, position: {}",
+                    new_position.unwrap_or_default()
+                );
                 self.scale = new_scale;
                 if let Some(new_position) = new_position {
                     self.camera = new_position;
                 }
                 None
             }
-            Message::NewFrame(instant) => {
-                let fixed_delta = Duration::from_secs_f32(1.0 / 60.0);
-
-                if instant - self.current >= fixed_delta {
-                    while instant - self.current >= fixed_delta {
-                        self.current += fixed_delta;
-
-                        if let Some(next_waypoint) = self.waypoints.front() {
-                            let velocity = (*next_waypoint - self.listener.position).normalized()
-                                * Self::SPEED;
-                            let dv = velocity * fixed_delta.as_secs_f32();
-                            self.listener.position += dv;
-
-                            while let Some(next_waypoint) = self.waypoints.front()
-                                && (*next_waypoint - self.listener.position).square_magnitude()
-                                    < dv.square_magnitude()
-                            {
-                                self.waypoints.pop_front();
-                            }
-                        }
-                    }
-
-                    Some(Action::MoveListener(self.listener.position))
-                } else {
-                    None
-                }
-            }
+            Message::NewFrame(instant) => self.update_frame(instant),
             Message::NewWaypoint(point) => {
                 if let Some(waypoint) = self.waypoints.back()
                     && (point - *waypoint).square_magnitude()
                         < Self::OVERLAP_THRESHOLD * Self::OVERLAP_THRESHOLD
                 {
+                    debug!("Overwriting waypoint.");
                     self.waypoints.pop_back();
                 }
+                info!("Creating new waypoint at {point}.");
                 self.waypoints.push_back(point);
                 None
             }
@@ -196,12 +178,14 @@ impl Soundscape {
             }
             Message::TrackMoved { id, new_position } => {
                 if let Some(track) = self.tracks.get_mut(&id) {
+                    trace!("Track zone {id} moved: {new_position}");
                     track.position = new_position;
                 }
                 Some(Action::MoveTrack(id, new_position))
             }
             Message::TrackResized { id, new_radius } => {
                 if let Some(track) = self.tracks.get_mut(&id) {
+                    trace!("Track zone {id} resized: {new_radius}");
                     track.radius = new_radius;
                 }
                 Some(Action::ResizeTrack(id, new_radius))
@@ -244,6 +228,36 @@ impl Soundscape {
                 .find(|(track_id, _)| **track_id == id)
                 .map(|(id, track)| (*id, track.clone()))
         })
+    }
+
+    fn update_frame(&mut self, instant: Instant) -> Option<Action> {
+        let fixed_delta = Duration::from_secs_f32(1.0 / 60.0);
+
+        if instant - self.current >= fixed_delta {
+            while instant - self.current >= fixed_delta {
+                self.current += fixed_delta;
+
+                if let Some(next_waypoint) = self.waypoints.front() {
+                    let velocity =
+                        (*next_waypoint - self.listener.position).normalized() * Self::SPEED;
+                    let dv = velocity * fixed_delta.as_secs_f32();
+                    self.listener.position += dv;
+
+                    while let Some(next_waypoint) = self.waypoints.front()
+                        && (*next_waypoint - self.listener.position).square_magnitude()
+                            < dv.square_magnitude()
+                    {
+                        info!("Reached waypoint.");
+                        self.waypoints.pop_front();
+                    }
+                }
+            }
+
+            trace!("Listener moved: {}", self.listener.position);
+            Some(Action::MoveListener(self.listener.position))
+        } else {
+            None
+        }
     }
 }
 

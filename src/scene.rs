@@ -9,6 +9,7 @@ use iced::{
     Element, Subscription, Task,
     widget::{button, column, container, stack, text},
 };
+use log::info;
 use ordermap::OrderMap;
 use ulid::Ulid;
 
@@ -134,6 +135,7 @@ impl Scene {
                 Some(Action::Run(task))
             }
             Message::Loaded => {
+                info!("Scene loaded.");
                 let tasks = self.tracks.keys().map(|id| {
                     Task::done(Message::Track(
                         track::Message::ListenerMoved(self.soundscape.listener_position()),

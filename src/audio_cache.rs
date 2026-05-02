@@ -8,6 +8,7 @@ use std::{
 
 use anyhow::Result;
 use kira::sound::streaming::{StreamingSoundData, StreamingSoundHandle};
+use log::debug;
 use ulid::Ulid;
 
 use crate::PROJECT_DIRS;
@@ -32,13 +33,18 @@ impl AudioCache {
 
     pub fn get_or_register<T: Read + Seek>(&mut self, data: &mut T) -> Result<Arc<AudioData>> {
         let hash = file_hash(data)?;
+        debug!("Requested track with hash {hash}.");
 
         if let Some(data) = self.handles.get(&hash) {
+            debug!("Cache hit for hash {hash} with ID {}.", data.id);
             Ok(data.clone())
         } else {
+            debug!("Cache miss for hash {hash}, creating new entry.");
             data.seek(SeekFrom::Start(0))?;
 
             let id = Ulid::new();
+            debug!("New entry has ID {id}.");
+
             let cache_path = cache_path(id);
 
             let mut file = File::create_buffered(cache_path)?;
@@ -77,6 +83,7 @@ impl AudioData {
     }
 
     pub fn load(&self) -> Result<FileStreamingSoundData> {
+        debug!("Loading sound data for audio ID {}.", self.id.to_string());
         let data = FileStreamingSoundData::from_file(self.cache_path())?;
         Ok(data)
     }
