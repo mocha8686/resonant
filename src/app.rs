@@ -106,7 +106,7 @@ impl App {
                         .load_scene(&path)
                         .expect("should be able to load scene");
                     self.scenes.push(scene);
-
+                    self.active_index = self.scenes.len() - 1;
                     Task::done(Message::Scene(scene::Message::Loaded))
                 } else {
                     Task::none()
