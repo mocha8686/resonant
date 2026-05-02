@@ -2,7 +2,13 @@ use crate::components::Toggle;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Message {
-    Press(bool),
+    Pressed(bool),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Action {
+    Play,
+    Pause,
 }
 
 #[derive(Default)]
@@ -16,17 +22,22 @@ impl PlayPause {
         Self::default()
     }
 
-    pub fn update(&mut self, msg: Message) {
+    pub fn update(&mut self, msg: Message) -> Action {
         match msg {
-            Message::Press(is_playing) => {
+            Message::Pressed(is_playing) => {
                 self.is_playing = is_playing;
+                if is_playing {
+                    Action::Play
+                } else {
+                    Action::Pause
+                }
             }
         }
     }
 }
 
 impl Toggle<'_, Message> for PlayPause {
-    const TOGGLE_MESSAGE: fn(bool) -> Message = Message::Press;
+    const TOGGLE_MESSAGE: fn(bool) -> Message = Message::Pressed;
 
     fn is_on(&self) -> bool {
         self.is_playing

@@ -1,4 +1,7 @@
-use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use std::{
+    fmt::Display,
+    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
+};
 
 use num_traits::Num;
 use serde::{Deserialize, Serialize};
@@ -55,6 +58,12 @@ impl Vector2<f64> {
     #[must_use]
     pub fn normalized(self) -> Self {
         self / self.magnitude()
+    }
+}
+
+impl<T: Display> Display for Vector2<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}, {})", self.x, self.y)
     }
 }
 

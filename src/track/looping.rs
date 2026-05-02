@@ -2,7 +2,13 @@ use crate::components::Toggle;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Message {
-    Press(bool),
+    Pressed(bool),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Action {
+    Enable,
+    Disable,
 }
 
 pub struct Loop {
@@ -21,17 +27,22 @@ impl Loop {
         Self::default()
     }
 
-    pub fn update(&mut self, msg: Message) {
+    pub fn update(&mut self, msg: Message) -> Action {
         match msg {
-            Message::Press(is_looping) => {
+            Message::Pressed(is_looping) => {
                 self.is_looping = is_looping;
+                if is_looping {
+                    Action::Enable
+                } else {
+                    Action::Disable
+                }
             }
         }
     }
 }
 
 impl Toggle<'_, Message> for Loop {
-    const TOGGLE_MESSAGE: fn(bool) -> Message = Message::Press;
+    const TOGGLE_MESSAGE: fn(bool) -> Message = Message::Pressed;
 
     fn is_on(&self) -> bool {
         self.is_looping

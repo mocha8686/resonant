@@ -1,18 +1,20 @@
-use std::time::Duration;
-
-use futures_time::task;
 use iced::{
-    Element, Task,
+    Element,
     mouse::Interaction,
     widget::{mouse_area, progress_bar},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Message {
-    Move(f32),
-    Press,
-    Release,
+    Moved(f32),
+    Pressed,
+    Released,
     Seeked,
+}
+
+#[derive(Debug)]
+pub enum Action {
+    Release,
 }
 
 #[derive(Default)]
@@ -25,8 +27,8 @@ pub struct Progress {
 }
 
 impl Progress {
+    pub const DEBOUNCE_INTERVAL: u64 = 500;
     const LENGTH: u32 = 200;
-    const DEBOUNCE_INTERVAL: u64 = 500;
     const GIRTH: u32 = 8;
 
     #[must_use]
@@ -37,28 +39,25 @@ impl Progress {
         }
     }
 
-    pub fn update(&mut self, msg: Message, is_playing: bool) -> Task<Message> {
+    pub fn update(&mut self, msg: Message, is_playing: bool) -> Option<Action> {
         match msg {
-            Message::Move(v) => {
+            Message::Moved(v) => {
                 self.cursor_pos = v;
                 if self.cursor_holding {
                     self.offset = self.cursor_pos;
                 }
                 None
             }
-            Message::Press => {
+            Message::Pressed => {
                 self.cursor_holding = true;
                 self.seeking = true;
                 self.offset = self.cursor_pos;
                 None
             }
-            Message::Release => {
+            Message::Released => {
                 self.cursor_holding = false;
 
-                Some(Task::perform(
-                    task::sleep(Duration::from_millis(Self::DEBOUNCE_INTERVAL).into()),
-                    |_| Message::Seeked,
-                ))
+                Some(Action::Release)
             }
             Message::Seeked => {
                 if !self.cursor_holding && is_playing {
@@ -67,7 +66,6 @@ impl Progress {
                 None
             }
         }
-        .unwrap_or_else(Task::none)
     }
 
     pub fn view(&self, track_position: f32) -> Element<'_, Message> {
@@ -83,9 +81,9 @@ impl Progress {
                 .girth(Self::GIRTH),
         )
         .interaction(Interaction::Pointer)
-        .on_move(move |p| Message::Move(p.x * self.duration / Self::LENGTH as f32))
-        .on_press(Message::Press)
-        .on_release(Message::Release)
+        .on_move(move |p| Message::Moved(p.x * self.duration / Self::LENGTH as f32))
+        .on_press(Message::Pressed)
+        .on_release(Message::Released)
         .into()
     }
 

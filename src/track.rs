@@ -1,6 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
+use futures_time::task;
 use iced::{
     Element, Task,
     widget::{button, column, container, text},
@@ -113,38 +114,44 @@ impl Track {
 
     pub fn update(&mut self, msg: Message) -> Option<Action> {
         match msg {
-            Message::PlayPause(m) => {
-                match m {
-                    play_pause::Message::Press(true) => {
+            Message::PlayPause(msg) => {
+                match self.play_pause.update(msg) {
+                    play_pause::Action::Play => {
                         self.play().expect("should be able to play");
                         self.progress.stop_seeking();
                     }
-                    play_pause::Message::Press(false) => {
+                    play_pause::Action::Pause => {
                         self.pause();
                     }
                 }
-                self.play_pause.update(m);
                 None
             }
-            Message::Progress(m) => {
-                if m == progress::Message::Release {
-                    if let Handle::Initialized(handle) = &mut self.handle {
-                        handle.seek_to(self.progress.offset());
-                    } else {
-                        self.create_track().expect("should be able to start track");
-                    }
-                }
+            Message::Progress(msg) => {
+                if let Some(action) = self.progress.update(msg, self.play_pause.is_on()) {
+                    match action {
+                        progress::Action::Release => {
+                            if let Handle::Initialized(handle) = &mut self.handle {
+                                handle.seek_to(self.progress.offset());
+                            } else {
+                                self.create_track().expect("should be able to start track");
+                            }
 
-                Some(Action::Run(
-                    self.progress
-                        .update(m, self.play_pause.is_on())
-                        .map(Message::Progress),
-                ))
+                            let debounce = Task::perform(
+                                task::sleep(Duration::from_millis(Progress::DEBOUNCE_INTERVAL).into()),
+                                |_| Message::Progress(progress::Message::Seeked),
+                            );
+
+                            Some(Action::Run(debounce))
+                        }
+                    }
+                } else {
+                    None
+                }
             }
-            Message::Loop(m) => {
-                let loop_region: Option<Region> = match m {
-                    looping::Message::Press(true) => Some((0.0..).into()),
-                    looping::Message::Press(false) => None,
+            Message::Loop(msg) => {
+                let loop_region: Option<Region> = match self.looping.update(msg) {
+                    looping::Action::Enable => Some((0.0..).into()),
+                    looping::Action::Disable => None,
                 };
 
                 match &mut self.handle {
@@ -158,7 +165,6 @@ impl Track {
                     }
                 }
 
-                self.looping.update(m);
                 None
             }
             Message::Selected(selected) => {
