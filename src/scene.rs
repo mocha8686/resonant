@@ -32,7 +32,7 @@ pub enum Message {
 pub enum Action {
     Run(Task<Message>),
     AddTrack,
-    SetModified,
+    Modifying(Box<Action>),
 }
 
 pub struct Scene {
@@ -68,7 +68,7 @@ impl Scene {
                             let task = Task::done(Message::Soundscape(
                                 soundscape::Message::TrackRemoved(id),
                             ));
-                            Some(Action::Run(task))
+                            Some(Action::Modifying(Box::new(Action::Run(task))))
                         }
                     }
                 } else {
@@ -89,7 +89,7 @@ impl Scene {
                             let select_task = Task::done(Message::Soundscape(
                                 soundscape::Message::TrackSelected(Some(id)),
                             ));
-                            Some(Action::Run(move_task.chain(select_task)))
+                            Some(Action::Modifying(Box::new(Action::Run(move_task.chain(select_task)))))
                         }
                         soundscape::Action::ResizeTrack(id, new_radius) => {
                             let task = Task::done(Message::Track(
@@ -99,7 +99,7 @@ impl Scene {
                                 },
                                 id,
                             ));
-                            Some(Action::Run(task))
+                            Some(Action::Modifying(Box::new(Action::Run(task))))
                         }
                         soundscape::Action::MoveListener(new_position) => {
                             let tasks = self.tracks.keys().map(|id| {
@@ -108,7 +108,7 @@ impl Scene {
                                     *id,
                                 ))
                             });
-                            Some(Action::Run(Task::batch(tasks)))
+                            Some(Action::Modifying(Box::new(Action::Run(Task::batch(tasks)))))
                         }
                         soundscape::Action::ChangeSelection {
                             deselected,
@@ -132,7 +132,7 @@ impl Scene {
                 let track = Track::new(id, name, data).expect("should be able to create track");
                 let task = Task::done(Message::Soundscape((&track).into()));
                 self.tracks.insert(track.id(), track);
-                Some(Action::Run(task))
+                Some(Action::Modifying(Box::new(Action::Run(task))))
             }
             Message::Loaded => {
                 log::info!("Scene loaded.");

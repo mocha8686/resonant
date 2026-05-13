@@ -27,11 +27,19 @@ impl Window {
             exit_on_close_request: false,
             ..settings
         });
+
+        log::info!(
+            "Opening new window with ID {} for scene {}.",
+            id,
+            scene.name()
+        );
+
         let window = Self {
             id,
             scene,
             modified: false,
         };
+
         (window, task)
     }
 
@@ -43,13 +51,20 @@ impl Window {
         match msg {
             Message::Scene(msg) => {
                 if let Some(action) = self.scene.update(msg) {
+                    let action = if let scene::Action::Modifying(action) = action {
+                        if !self.modified {
+                            log::debug!("Setting modified flag for window {}.", self.id);
+                            self.modified = true;
+                        }
+                        *action
+                    } else {
+                        action
+                    };
+
                     match action {
                         scene::Action::Run(task) => Some(Action::Run(task.map(Message::Scene))),
                         scene::Action::AddTrack => Some(Action::AddTrack),
-                        scene::Action::SetModified => {
-                            self.modified = true;
-                            None
-                        }
+                        scene::Action::Modifying(_) => unreachable!(),
                     }
                 } else {
                     None
@@ -61,7 +76,19 @@ impl Window {
                     return Some(Action::Close);
                 }
 
-                Some(Action::Close)
+                let res = rfd::MessageDialog::new()
+                    .set_buttons(rfd::MessageButtons::YesNoCancel)
+                    .set_level(rfd::MessageLevel::Info)
+                    .set_title("Unsaved changes")
+                    .set_description("Would you like to save unsaved changes before exiting?")
+                    .show();
+
+                match res {
+                    rfd::MessageDialogResult::Yes => todo!(),
+                    rfd::MessageDialogResult::No => Some(Action::Close),
+                    rfd::MessageDialogResult::Cancel => None,
+                    _ => unreachable!(),
+                }
             }
         }
     }
