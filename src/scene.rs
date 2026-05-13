@@ -33,6 +33,7 @@ pub enum Message {
 pub enum Action {
     Run(Task<Message>),
     AddTrack,
+    SetModified,
 }
 
 pub struct Scene {

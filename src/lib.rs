@@ -11,6 +11,7 @@
 mod app;
 pub(crate) mod audio_cache;
 pub(crate) mod components;
+pub(crate) mod window;
 pub mod scene;
 pub mod soundscape;
 pub mod track;

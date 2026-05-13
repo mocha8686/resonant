@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     fs::File,
     path::{Path, PathBuf},
 };
@@ -8,9 +9,11 @@ use iced::{
     Element,
     Length::Fill,
     Subscription, Task,
+    futures::stream,
     widget::{button, column, container, row, text},
+    window as iced_window,
 };
-use log::{debug, info};
+use log::{debug, info, warn};
 use rfd::FileDialog;
 use ulid::Ulid;
 
@@ -18,27 +21,27 @@ use crate::{
     PROJECT_DIRS,
     audio_cache::AudioCache,
     scene::{self, Scene, SceneData},
+    window::{self, Window},
 };
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
-    Scene(scene::Message),
-    SwitchScene(usize),
-    Save,
+    Initialized,
+    Window(iced_window::Id, window::Message),
+    Save(iced_window::Id),
     Load,
+    CloseRequested(iced_window::Id),
 }
 
 pub struct App {
-    scenes: Vec<Scene>,
-    active_index: usize,
+    windows: HashMap<iced_window::Id, Window>,
     audio_cache: AudioCache,
 }
 
 impl Default for App {
     fn default() -> Self {
         Self {
-            scenes: vec![Scene::default()],
-            active_index: 0,
+            windows: HashMap::new(),
             audio_cache: AudioCache::new(),
         }
     }
@@ -49,51 +52,76 @@ impl App {
 
     pub fn update(&mut self, msg: Message) -> Task<Message> {
         match msg {
-            Message::Scene(msg) => {
-                if let Some(action) = self.active_scene_mut().update(msg) {
+            Message::Initialized => {
+                let default_scene = Scene::default();
+                let (window, open) = Window::open(default_scene, iced_window::Settings::default());
+                self.windows.insert(window.id(), window);
+
+                open.discard()
+            }
+            Message::Window(window_id, msg) => {
+                if let Some(window) = self.windows.get_mut(&window_id)
+                    && let Some(action) = window.update(msg)
+                {
                     match action {
-                        scene::Action::Run(task) => task.map(Message::Scene),
-                        scene::Action::AddTrack => {
+                        window::Action::Run(task) => {
+                            task.map(move |msg| Message::Window(window_id, msg))
+                        }
+                        window::Action::AddTrack => {
                             info!("Received request to load new track for current scene.");
 
                             if let Some(path) = FileDialog::new()
                                 .add_filter("audio", &["flac", "mp3", "ogg", "wav", "webm"])
                                 .pick_file()
                             {
-                                let msg =
-                                    self.add_track(&path).expect("should be able to add track");
+                                let msg = self
+                                    .add_track(window_id, &path)
+                                    .expect("should be able to add track");
                                 Task::done(msg)
                             } else {
                                 info!("Track load cancelled for current scene.");
                                 Task::none()
                             }
                         }
+                        window::Action::Close => {
+                            self.windows.remove(&window_id);
+
+                            let close = iced_window::close(window_id);
+                            let exit = if self.windows.is_empty() {
+                                iced::exit()
+                            } else {
+                                Task::none()
+                            };
+
+                            close.chain(exit)
+                        }
                     }
                 } else {
                     Task::none()
                 }
             }
-            Message::SwitchScene(index) => {
-                info!("Switching to scene #{index}.");
-                self.active_index = index;
-                Task::none()
-            }
-            Message::Save => {
+            Message::Save(window_id) => {
                 info!("Received request to save current scene.");
-                if let Some(path) = FileDialog::new()
-                    .add_filter("resonant scene", &[Self::FILE_EXTENSION])
-                    .set_file_name(format!(
-                        "{}.{}",
-                        self.active_scene().name(),
-                        Self::FILE_EXTENSION
-                    ))
-                    .save_file()
-                {
-                    self.save_active_scene(path)
-                        .expect("should be able to save current scene");
+
+                if let Some(window) = self.windows.get(&window_id) {
+                    if let Some(path) = FileDialog::new()
+                        .add_filter("resonant scene", &[Self::FILE_EXTENSION])
+                        .set_file_name(format!(
+                            "{}.{}",
+                            window.scene().name(),
+                            Self::FILE_EXTENSION
+                        ))
+                        .save_file()
+                    {
+                        self.save_scene(window.scene(), path)
+                            .expect("should be able to save current scene");
+                    } else {
+                        info!("Save cancelled.");
+                    }
                 } else {
-                    info!("Save cancelled.");
+                    warn!("Scene not found.");
                 }
+
                 Task::none()
             }
             Message::Load => {
@@ -105,51 +133,55 @@ impl App {
                     let scene = self
                         .load_scene(&path)
                         .expect("should be able to load scene");
-                    self.scenes.push(scene);
-                    self.active_index = self.scenes.len() - 1;
-                    Task::done(Message::Scene(scene::Message::Loaded))
+
+                    let (window, open) = Window::open(scene, iced_window::Settings::default());
+                    let window_id = window.id();
+                    self.windows.insert(window_id, window);
+
+                    open.discard().chain(Task::done(Message::Window(
+                        window_id,
+                        window::Message::Scene(scene::Message::Loaded),
+                    )))
                 } else {
                     Task::none()
                 }
             }
+            Message::CloseRequested(id) => {
+                Task::done(Message::Window(id, window::Message::CloseRequested))
+            }
         }
     }
 
-    pub fn view(&self) -> Element<'_, Message> {
-        let tabs = row(self.scenes.iter().enumerate().map(|(i, scene)| {
-            let style = if self.active_index == i {
-                button::primary
-            } else {
-                button::background
-            };
-            button(scene.name())
-                .on_press(Message::SwitchScene(i))
-                .style(style)
-                .width(200)
-                .into()
-        }));
+    pub fn view(&self, window_id: iced_window::Id) -> Element<'_, Message> {
+        if let Some(window) = self.windows.get(&window_id) {
+            let scene_info = container(row![
+                text(window.scene().name()),
+                button("Save")
+                    .on_press(Message::Save(window_id))
+                    .style(button::background),
+                button("Load")
+                    .on_press(Message::Load)
+                    .style(button::background),
+            ])
+            .style(container::primary)
+            .padding(4)
+            .width(Fill);
 
-        let scene_info = container(row![
-            text(self.active_scene().name()),
-            button("Save")
-                .on_press(Message::Save)
-                .style(button::background),
-            button("Load")
-                .on_press(Message::Load)
-                .style(button::background),
-        ])
-        .style(container::primary)
-        .padding(4)
-        .width(Fill);
-
-        let topbar = column![tabs, scene_info];
-
-        column![topbar, self.active_scene().view().map(Message::Scene),].into()
+            column![
+                scene_info,
+                window
+                    .view()
+                    .map(move |msg| Message::Window(window_id, msg)),
+            ]
+            .into()
+        } else {
+            text("Scene not found.").into()
+        }
     }
 
-    fn save_active_scene(&mut self, mut path: PathBuf) -> Result<()> {
+    fn save_scene(&self, scene: &Scene, mut path: PathBuf) -> Result<()> {
         info!(
-            "Saving current scene to {}.",
+            "Ssving current scene to {}.",
             path.to_str().unwrap_or_default()
         );
         if path.extension().and_then(|s| s.to_str()) != Some(Self::FILE_EXTENSION) {
@@ -161,7 +193,7 @@ impl App {
             .with_file_name(path.file_name().unwrap());
 
         {
-            let data = SceneData::new(self.active_scene(), &self.audio_cache)?;
+            let data = SceneData::new(scene, &self.audio_cache)?;
             let mut swapfile = File::create_buffered(&swapfile_path)?;
             rmp_serde::encode::write(&mut swapfile, &data)?;
             debug!("Wrote save to swapfile.");
@@ -190,7 +222,7 @@ impl App {
         Ok(scene)
     }
 
-    fn add_track(&mut self, path: &Path) -> Result<Message> {
+    fn add_track(&mut self, window_id: iced_window::Id, path: &Path) -> Result<Message> {
         info!(
             "Loading track at {} for current scene.",
             path.to_str().unwrap_or_default(),
@@ -211,22 +243,22 @@ impl App {
 
         info!("Loaded track {id} ({name}).");
 
-        Ok(Message::Scene(scene::Message::TrackAdded {
-            id,
-            name,
-            data,
-        }))
+        Ok(Message::Window(
+            window_id,
+            window::Message::Scene(scene::Message::TrackAdded { id, name, data }),
+        ))
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
-        self.active_scene().subscription().map(Message::Scene)
-    }
-
-    fn active_scene(&self) -> &Scene {
-        &self.scenes[self.active_index]
-    }
-
-    fn active_scene_mut(&mut self) -> &mut Scene {
-        &mut self.scenes[self.active_index]
+        let initialized = Subscription::run(|| stream::once(async { Message::Initialized }));
+        let windows = Subscription::batch(self.windows.iter().map(|(window_id, window)| {
+            let window_id = *window_id;
+            window
+                .subscription()
+                .with(window_id)
+                .map(|(window_id, msg)| Message::Window(window_id, msg))
+        }));
+        let window_close = iced_window::close_requests().map(Message::CloseRequested);
+        Subscription::batch([initialized, windows, window_close])
     }
 }

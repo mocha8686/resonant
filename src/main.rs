@@ -22,7 +22,7 @@ fn setup_logger() -> Result<(), fern::InitError> {
 
 fn main() -> anyhow::Result<()> {
     setup_logger()?;
-    iced::application(App::default, App::update, App::view)
+    iced::daemon(App::default, App::update, App::view)
         .subscription(App::subscription)
         .run()?;
     Ok(())
