@@ -18,6 +18,8 @@ pub enum Message {
 pub enum Action {
     Run(Task<Message>),
     AddTrack,
+    Save,
+    Load,
     Close,
 }
 
@@ -64,6 +66,8 @@ impl Window {
                     match action {
                         scene::Action::Run(task) => Some(Action::Run(task.map(Message::Scene))),
                         scene::Action::AddTrack => Some(Action::AddTrack),
+                        scene::Action::Save => Some(Action::Save),
+                        scene::Action::Load => Some(Action::Load),
                         scene::Action::Modifying(_) => unreachable!(),
                     }
                 } else {

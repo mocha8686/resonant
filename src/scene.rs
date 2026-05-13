@@ -6,8 +6,10 @@ use crate::{
     track::{self, Track},
 };
 use iced::{
-    Element, Subscription, Task,
-    widget::{button, column, container, stack, text},
+    Element,
+    Length::Fill,
+    Subscription, Task,
+    widget::{button, column, container, row, stack, text},
 };
 use ordermap::OrderMap;
 use ulid::Ulid;
@@ -26,12 +28,16 @@ pub enum Message {
         data: Arc<AudioData>,
     },
     Loaded,
+    SaveRequested,
+    LoadRequested,
 }
 
 #[derive(Debug)]
 pub enum Action {
     Run(Task<Message>),
     AddTrack,
+    Save,
+    Load,
     Modifying(Box<Action>),
 }
 
@@ -89,7 +95,9 @@ impl Scene {
                             let select_task = Task::done(Message::Soundscape(
                                 soundscape::Message::TrackSelected(Some(id)),
                             ));
-                            Some(Action::Modifying(Box::new(Action::Run(move_task.chain(select_task)))))
+                            Some(Action::Modifying(Box::new(Action::Run(
+                                move_task.chain(select_task),
+                            ))))
                         }
                         soundscape::Action::ResizeTrack(id, new_radius) => {
                             let task = Task::done(Message::Track(
@@ -144,10 +152,26 @@ impl Scene {
                 });
                 Some(Action::Run(Task::batch(tasks)))
             }
+            Message::SaveRequested => Some(Action::Save),
+            Message::LoadRequested => Some(Action::Load),
         }
     }
 
+    #[must_use]
     pub fn view(&self) -> Element<'_, Message> {
+        column![self.info_view(), self.main_view(),].into()
+    }
+
+    pub fn subscription(&self) -> Subscription<Message> {
+        self.soundscape.subscription().map(Message::Soundscape)
+    }
+
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn main_view(&self) -> Element<'_, Message> {
         let tracks = column(
             self.tracks
                 .values()
@@ -167,15 +191,22 @@ impl Scene {
 
         let canvas = self.soundscape.view().map(Message::Soundscape);
 
-        stack![canvas, container(track_menu).padding(4),].into()
+        stack![canvas, container(track_menu).padding(4)].into()
     }
 
-    pub fn subscription(&self) -> Subscription<Message> {
-        self.soundscape.subscription().map(Message::Soundscape)
-    }
-
-    #[must_use]
-    pub fn name(&self) -> &str {
-        &self.name
+    fn info_view(&self) -> Element<'_, Message> {
+        container(row![
+            text(self.name()),
+            button("Save")
+                .on_press(Message::SaveRequested)
+                .style(button::background),
+            button("Load")
+                .on_press(Message::LoadRequested)
+                .style(button::background),
+        ])
+        .style(container::primary)
+        .padding(4)
+        .width(Fill)
+        .into()
     }
 }

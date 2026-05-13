@@ -5,14 +5,7 @@ use std::{
 };
 
 use anyhow::Result;
-use iced::{
-    Element,
-    Length::Fill,
-    Subscription, Task,
-    futures::stream,
-    widget::{button, column, container, row, text},
-    window as iced_window,
-};
+use iced::{Element, Subscription, Task, futures::stream, widget::text, window as iced_window};
 use rfd::FileDialog;
 use ulid::Ulid;
 
@@ -27,8 +20,8 @@ use crate::{
 pub enum Message {
     Initialized,
     Window(iced_window::Id, window::Message),
-    Save(iced_window::Id),
-    Load,
+    SaveRequested(iced_window::Id),
+    LoadRequested,
     CloseRequested(iced_window::Id),
 }
 
@@ -82,6 +75,8 @@ impl App {
                                 Task::none()
                             }
                         }
+                        window::Action::Save => Task::done(Message::SaveRequested(window_id)),
+                        window::Action::Load => Task::done(Message::LoadRequested),
                         window::Action::Close => {
                             self.windows.remove(&window_id);
 
@@ -99,7 +94,7 @@ impl App {
                     Task::none()
                 }
             }
-            Message::Save(window_id) => {
+            Message::SaveRequested(window_id) => {
                 log::info!("Received request to save current scene.");
 
                 if let Some(window) = self.windows.get(&window_id) {
@@ -123,7 +118,7 @@ impl App {
 
                 Task::none()
             }
-            Message::Load => {
+            Message::LoadRequested => {
                 log::info!("Received request to load scene savefile.");
                 if let Some(path) = FileDialog::new()
                     .add_filter("resonant scene", &[Self::FILE_EXTENSION])
@@ -151,28 +146,12 @@ impl App {
         }
     }
 
+    #[must_use]
     pub fn view(&self, window_id: iced_window::Id) -> Element<'_, Message> {
         if let Some(window) = self.windows.get(&window_id) {
-            let scene_info = container(row![
-                text(window.scene().name()),
-                button("Save")
-                    .on_press(Message::Save(window_id))
-                    .style(button::background),
-                button("Load")
-                    .on_press(Message::Load)
-                    .style(button::background),
-            ])
-            .style(container::primary)
-            .padding(4)
-            .width(Fill);
-
-            column![
-                scene_info,
-                window
-                    .view()
-                    .map(move |msg| Message::Window(window_id, msg)),
-            ]
-            .into()
+            window
+                .view()
+                .map(move |msg| Message::Window(window_id, msg))
         } else {
             text("Scene not found.").into()
         }
