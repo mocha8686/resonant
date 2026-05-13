@@ -13,7 +13,6 @@ use iced::{
     widget::{button, column, container, row, text},
     window as iced_window,
 };
-use log::{debug, info, warn};
 use rfd::FileDialog;
 use ulid::Ulid;
 
@@ -68,7 +67,7 @@ impl App {
                             task.map(move |msg| Message::Window(window_id, msg))
                         }
                         window::Action::AddTrack => {
-                            info!("Received request to load new track for current scene.");
+                            log::info!("Received request to load new track for current scene.");
 
                             if let Some(path) = FileDialog::new()
                                 .add_filter("audio", &["flac", "mp3", "ogg", "wav", "webm"])
@@ -79,7 +78,7 @@ impl App {
                                     .expect("should be able to add track");
                                 Task::done(msg)
                             } else {
-                                info!("Track load cancelled for current scene.");
+                                log::info!("Track load cancelled for current scene.");
                                 Task::none()
                             }
                         }
@@ -101,7 +100,7 @@ impl App {
                 }
             }
             Message::Save(window_id) => {
-                info!("Received request to save current scene.");
+                log::info!("Received request to save current scene.");
 
                 if let Some(window) = self.windows.get(&window_id) {
                     if let Some(path) = FileDialog::new()
@@ -116,16 +115,16 @@ impl App {
                         self.save_scene(window.scene(), path)
                             .expect("should be able to save current scene");
                     } else {
-                        info!("Save cancelled.");
+                        log::info!("Save cancelled.");
                     }
                 } else {
-                    warn!("Scene not found.");
+                    log::warn!("Scene not found.");
                 }
 
                 Task::none()
             }
             Message::Load => {
-                info!("Received request to load scene savefile.");
+                log::info!("Received request to load scene savefile.");
                 if let Some(path) = FileDialog::new()
                     .add_filter("resonant scene", &[Self::FILE_EXTENSION])
                     .pick_file()
@@ -180,7 +179,7 @@ impl App {
     }
 
     fn save_scene(&self, scene: &Scene, mut path: PathBuf) -> Result<()> {
-        info!(
+        log::info!(
             "Ssving current scene to {}.",
             path.to_str().unwrap_or_default()
         );
@@ -196,11 +195,11 @@ impl App {
             let data = SceneData::new(scene, &self.audio_cache)?;
             let mut swapfile = File::create_buffered(&swapfile_path)?;
             rmp_serde::encode::write(&mut swapfile, &data)?;
-            debug!("Wrote save to swapfile.");
+            log::debug!("Wrote save to swapfile.");
         }
 
         std::fs::rename(&swapfile_path, &path)?;
-        info!(
+        log::info!(
             "Current scene saved to {}.",
             path.to_str().unwrap_or_default()
         );
@@ -209,21 +208,21 @@ impl App {
     }
 
     fn load_scene(&mut self, path: &Path) -> Result<Scene> {
-        info!("Loading scene at {}.", path.to_str().unwrap_or_default());
+        log::info!("Loading scene at {}.", path.to_str().unwrap_or_default());
         let scene_name = path.file_stem().unwrap().to_string_lossy();
 
         let file = File::open(path)?;
         let data: SceneData = rmp_serde::decode::from_read(file)?;
-        debug!("Loaded savefile data.");
+        log::debug!("Loaded savefile data.");
 
         let scene: Scene = Scene::from_data(data.with_name(&scene_name), &mut self.audio_cache)?;
-        info!("Loaded scene {}.", scene.name());
+        log::info!("Loaded scene {}.", scene.name());
 
         Ok(scene)
     }
 
     fn add_track(&mut self, window_id: iced_window::Id, path: &Path) -> Result<Message> {
-        info!(
+        log::info!(
             "Loading track at {} for current scene.",
             path.to_str().unwrap_or_default(),
         );
@@ -231,17 +230,17 @@ impl App {
         let name = path.file_stem().map_or("Unknown filename".into(), |s| {
             s.to_string_lossy().to_string()
         });
-        debug!("Track name: {name}");
+        log::debug!("Track name: {name}");
 
         let mut file = File::open_buffered(path)?;
 
         let data = self.audio_cache.get_or_register(&mut file)?;
-        debug!("Registered track.");
+        log::debug!("Registered track.");
 
         let id = Ulid::new();
-        debug!("Track ID: {id}");
+        log::debug!("Track ID: {id}");
 
-        info!("Loaded track {id} ({name}).");
+        log::info!("Loaded track {id} ({name}).");
 
         Ok(Message::Window(
             window_id,

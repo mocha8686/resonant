@@ -4,7 +4,6 @@ use std::{
 };
 
 use iced::{Element, Length::Fill, Subscription, window};
-use log::{debug, info, trace};
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
@@ -124,7 +123,7 @@ impl Soundscape {
     pub fn update(&mut self, msg: Message) -> Option<Action> {
         match msg {
             Message::Translated { new_position } => {
-                trace!("Camera moved: {new_position}");
+                log::trace!("Camera moved: {new_position}");
                 self.camera = new_position;
                 None
             }
@@ -132,7 +131,7 @@ impl Soundscape {
                 new_scale,
                 new_position,
             } => {
-                trace!(
+                log::trace!(
                     "Camera zoomed: scale: {new_scale}, position: {}",
                     new_position.unwrap_or_default()
                 );
@@ -148,10 +147,10 @@ impl Soundscape {
                     && (point - *waypoint).square_magnitude()
                         < Self::OVERLAP_THRESHOLD * Self::OVERLAP_THRESHOLD
                 {
-                    debug!("Overwriting waypoint.");
+                    log::debug!("Overwriting waypoint.");
                     self.waypoints.pop_back();
                 }
-                info!("Creating new waypoint at {point}.");
+                log::info!("Creating new waypoint at {point}.");
                 self.waypoints.push_back(point);
                 None
             }
@@ -178,14 +177,14 @@ impl Soundscape {
             }
             Message::TrackMoved { id, new_position } => {
                 if let Some(track) = self.tracks.get_mut(&id) {
-                    trace!("Track zone {id} moved: {new_position}");
+                    log::trace!("Track zone {id} moved: {new_position}");
                     track.position = new_position;
                 }
                 Some(Action::MoveTrack(id, new_position))
             }
             Message::TrackResized { id, new_radius } => {
                 if let Some(track) = self.tracks.get_mut(&id) {
-                    trace!("Track zone {id} resized: {new_radius}");
+                    log::trace!("Track zone {id} resized: {new_radius}");
                     track.radius = new_radius;
                 }
                 Some(Action::ResizeTrack(id, new_radius))
@@ -247,13 +246,13 @@ impl Soundscape {
                         && (*next_waypoint - self.listener.position).square_magnitude()
                             < dv.square_magnitude()
                     {
-                        info!("Reached waypoint.");
+                        log::info!("Reached waypoint.");
                         self.waypoints.pop_front();
                     }
                 }
             }
 
-            trace!("Listener moved: {}", self.listener.position);
+            log::trace!("Listener moved: {}", self.listener.position);
             Some(Action::MoveListener(self.listener.position))
         } else {
             None

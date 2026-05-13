@@ -10,7 +10,6 @@ use kira::{
     AudioManager, AudioManagerSettings, Decibels, Easing, StartTime, Tween, Tweenable,
     sound::{PlaybackPosition, PlaybackState, Region},
 };
-use log::{debug, info, trace};
 use ulid::Ulid;
 
 use crate::{
@@ -118,12 +117,12 @@ impl Track {
             Message::PlayPause(msg) => {
                 match self.play_pause.update(msg) {
                     play_pause::Action::Play => {
-                        info!("Playing track {}.", self.id.to_string());
+                        log::info!("Playing track {}.", self.id.to_string());
                         self.play().expect("should be able to play");
                         self.progress.stop_seeking();
                     }
                     play_pause::Action::Pause => {
-                        info!("Pausing track {}.", self.id.to_string());
+                        log::info!("Pausing track {}.", self.id.to_string());
                         self.pause();
                     }
                 }
@@ -133,7 +132,7 @@ impl Track {
                 if let Some(action) = self.progress.update(msg, self.play_pause.is_on()) {
                     match action {
                         progress::Action::Release => {
-                            info!(
+                            log::info!(
                                 "Seeking track {} to {:.2}s.",
                                 self.id.to_string(),
                                 self.progress.offset()
@@ -161,11 +160,11 @@ impl Track {
             Message::Loop(msg) => {
                 let loop_region: Option<Region> = match self.looping.update(msg) {
                     looping::Action::Enable => {
-                        info!("Enabling looping for track {}.", self.id.to_string());
+                        log::info!("Enabling looping for track {}.", self.id.to_string());
                         Some((0.0..).into())
                     }
                     looping::Action::Disable => {
-                        info!("Disabling looping for track {}.", self.id.to_string());
+                        log::info!("Disabling looping for track {}.", self.id.to_string());
                         None
                     }
                 };
@@ -185,9 +184,9 @@ impl Track {
             }
             Message::Selected(selected) => {
                 if selected {
-                    debug!("Selecting track {}.", self.id.to_string());
+                    log::debug!("Selecting track {}.", self.id.to_string());
                 } else {
-                    debug!("Deselecting track {}.", self.id.to_string());
+                    log::debug!("Deselecting track {}.", self.id.to_string());
                 }
                 self.selected = selected;
                 None
@@ -196,7 +195,7 @@ impl Track {
                 new_position,
                 listener_position,
             } => {
-                trace!("Moving track {} to {new_position}.", self.id.to_string());
+                log::trace!("Moving track {} to {new_position}.", self.id.to_string());
                 self.position = new_position;
                 self.recalculate_volume(listener_position);
                 None
@@ -205,7 +204,7 @@ impl Track {
                 new_radius,
                 listener_position,
             } => {
-                trace!("Resizing track {} to {new_radius}.", self.id.to_string());
+                log::trace!("Resizing track {} to {new_radius}.", self.id.to_string());
                 self.radius = new_radius;
                 self.recalculate_volume(listener_position);
                 None
