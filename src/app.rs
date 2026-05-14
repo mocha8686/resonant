@@ -2,11 +2,17 @@ use std::{
     collections::HashMap,
     fs::File,
     path::{Path, PathBuf},
+    sync::{Arc, Mutex},
 };
 
 use anyhow::Result;
-use iced::{Element, Subscription, Task, futures::stream, widget::text, window as iced_window};
-use rfd::FileDialog;
+use iced::{
+    Element, Subscription, Task,
+    futures::stream,
+    widget::text,
+    window as iced_window,
+};
+use rfd::{AsyncFileDialog, FileDialog};
 use ulid::Ulid;
 
 use crate::{
@@ -16,31 +22,33 @@ use crate::{
     window::{self, Window},
 };
 
-#[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     Initialized,
     Window(iced_window::Id, window::Message),
     SaveRequested(iced_window::Id),
+    Saved(iced_window::Id),
     LoadRequested,
+    Loaded(Window),
     CloseRequested(iced_window::Id),
+    Error(String),
 }
 
 pub struct App {
     windows: HashMap<iced_window::Id, Window>,
-    audio_cache: AudioCache,
+    audio_cache: Arc<Mutex<AudioCache>>,
 }
 
 impl Default for App {
     fn default() -> Self {
         Self {
             windows: HashMap::new(),
-            audio_cache: AudioCache::new(),
+            audio_cache: Arc::new(Mutex::new(AudioCache::new())),
         }
     }
 }
 
 impl App {
-    const FILE_EXTENSION: &'static str = "rst";
+    const SAVEFILE_EXTENSION: &'static str = "rst";
 
     pub fn update(&mut self, msg: Message) -> Task<Message> {
         match msg {
@@ -94,54 +102,26 @@ impl App {
                     Task::none()
                 }
             }
-            Message::SaveRequested(window_id) => {
-                log::info!("Received request to save current scene.");
-
-                if let Some(window) = self.windows.get(&window_id) {
-                    if let Some(path) = FileDialog::new()
-                        .add_filter("resonant scene", &[Self::FILE_EXTENSION])
-                        .set_file_name(format!(
-                            "{}.{}",
-                            window.scene().name(),
-                            Self::FILE_EXTENSION
-                        ))
-                        .save_file()
-                    {
-                        self.save_scene(window.scene(), path)
-                            .expect("should be able to save current scene");
-                    } else {
-                        log::info!("Save cancelled.");
-                    }
-                } else {
-                    log::warn!("Scene not found.");
-                }
-
-                Task::none()
+            Message::SaveRequested(window_id) => self.save_scene(window_id),
+            Message::Saved(window_id) => {
+                Task::done(Message::Window(window_id, window::Message::Saved))
             }
-            Message::LoadRequested => {
-                log::info!("Received request to load scene savefile.");
-                if let Some(path) = FileDialog::new()
-                    .add_filter("resonant scene", &[Self::FILE_EXTENSION])
-                    .pick_file()
-                {
-                    let scene = self
-                        .load_scene(&path)
-                        .expect("should be able to load scene");
-
-                    let (window, open) = Window::open(scene, iced_window::Settings::default());
-                    let window_id = window.id();
-                    self.windows.insert(window_id, window);
-
-                    open.discard().chain(Task::done(Message::Window(
-                        window_id,
-                        window::Message::Scene(scene::Message::Loaded),
-                    )))
-                } else {
-                    Task::none()
-                }
+            Message::LoadRequested => self.load_scene(),
+            Message::Loaded(window) => {
+                let window_id = window.id();
+                self.windows.insert(window_id, window);
+                Task::done(Message::Window(
+                    window_id,
+                    window::Message::Scene(scene::Message::Loaded),
+                ))
             }
             Message::CloseRequested(id) => {
                 Task::done(Message::Window(id, window::Message::CloseRequested))
+            }
+            Message::Error(s) => {
+                // TODO: error toasts or smth
+                log::error!("Error: {s}");
+                Task::none()
             }
         }
     }
@@ -157,47 +137,59 @@ impl App {
         }
     }
 
-    fn save_scene(&self, scene: &Scene, mut path: PathBuf) -> Result<()> {
-        log::info!(
-            "Ssving current scene to {}.",
-            path.to_str().unwrap_or_default()
-        );
-        if path.extension().and_then(|s| s.to_str()) != Some(Self::FILE_EXTENSION) {
-            path.add_extension(Self::FILE_EXTENSION);
+    fn save_scene(&mut self, window_id: iced_window::Id) -> Task<Message> {
+        if let Some(window) = self.windows.get(&window_id) {
+            let scene_data = Arc::new(
+                SceneData::new(window.scene(), &self.audio_cache)
+                    .expect("should be able to create scene data"),
+            );
+            let scene_name = Arc::new(window.scene().name().to_string());
+            log::info!("Received request to save scene {scene_name}.");
+
+            Task::future(
+                AsyncFileDialog::new()
+                    .add_filter("resonant scene", &[Self::SAVEFILE_EXTENSION])
+                    .set_file_name(format!("{}.{}", scene_name, Self::SAVEFILE_EXTENSION))
+                    .save_file(),
+            )
+            .and_then(move |handle| {
+                save_scene_task(
+                    handle.path().to_owned(),
+                    scene_name.to_string(),
+                    scene_data.clone(),
+                )
+            })
+            .map(move |res| match res {
+                Ok(()) => Message::Saved(window_id),
+                Err(e) => Message::Error(e.to_string()),
+            })
+        } else {
+            log::warn!("Scene not found.");
+            Task::none()
         }
-
-        let swapfile_path = PROJECT_DIRS
-            .cache_dir()
-            .with_file_name(path.file_name().unwrap());
-
-        {
-            let data = SceneData::new(scene, &self.audio_cache)?;
-            let mut swapfile = File::create_buffered(&swapfile_path)?;
-            rmp_serde::encode::write(&mut swapfile, &data)?;
-            log::debug!("Wrote save to swapfile.");
-        }
-
-        std::fs::rename(&swapfile_path, &path)?;
-        log::info!(
-            "Current scene saved to {}.",
-            path.to_str().unwrap_or_default()
-        );
-
-        Ok(())
     }
 
-    fn load_scene(&mut self, path: &Path) -> Result<Scene> {
-        log::info!("Loading scene at {}.", path.to_str().unwrap_or_default());
-        let scene_name = path.file_stem().unwrap().to_string_lossy();
+    fn load_scene(&mut self) -> Task<Message> {
+        log::info!("Received request to load scene savefile.");
+        let audio_cache = self.audio_cache.clone();
 
-        let file = File::open(path)?;
-        let data: SceneData = rmp_serde::decode::from_read(file)?;
-        log::debug!("Loaded savefile data.");
-
-        let scene: Scene = Scene::from_data(data.with_name(&scene_name), &mut self.audio_cache)?;
-        log::info!("Loaded scene {}.", scene.name());
-
-        Ok(scene)
+        Task::future(
+            AsyncFileDialog::new()
+                .add_filter(
+                    concat!(env!("CARGO_PKG_NAME"), " scene"),
+                    &[Self::SAVEFILE_EXTENSION],
+                )
+                .pick_file(),
+        )
+        .and_then(move |handle| load_scene_task(handle, audio_cache.clone()))
+        .and_then(move |scene| {
+            let (window, open) = Window::open(scene, iced_window::Settings::default());
+            open.discard().chain(Task::done(Ok(window)))
+        })
+        .map(|res| match res {
+            Ok(window) => Message::Loaded(window),
+            Err(e) => Message::Error(e.to_string()),
+        })
     }
 
     fn add_track(&mut self, window_id: iced_window::Id, path: &Path) -> Result<Message> {
@@ -213,7 +205,12 @@ impl App {
 
         let mut file = File::open_buffered(path)?;
 
-        let data = self.audio_cache.get_or_register(&mut file)?;
+        let data = self
+            .audio_cache
+            .clone()
+            .lock()
+            .unwrap()
+            .get_or_register(&mut file)?;
         log::debug!("Registered track.");
 
         let id = Ulid::new();
@@ -239,4 +236,64 @@ impl App {
         let window_close = iced_window::close_requests().map(Message::CloseRequested);
         Subscription::batch([initialized, windows, window_close])
     }
+}
+
+fn save_scene_task(
+    mut path: PathBuf,
+    scene_name: String,
+    scene_data: Arc<SceneData>,
+) -> Task<Result<()>> {
+    Task::future(async move {
+        log::info!(
+            "Saving scene {} to {}.",
+            scene_name,
+            path.to_str().unwrap_or_default()
+        );
+
+        if path.extension().and_then(|s| s.to_str()) != Some(App::SAVEFILE_EXTENSION) {
+            path.add_extension(App::SAVEFILE_EXTENSION);
+        }
+
+        let swapfile_path = PROJECT_DIRS
+            .cache_dir()
+            .with_file_name(path.file_name().unwrap());
+
+        {
+            let mut swapfile = File::create_buffered(&swapfile_path)?;
+            rmp_serde::encode::write(&mut swapfile, &*scene_data)?;
+            log::debug!("Wrote save to swapfile.");
+        }
+
+        std::fs::rename(&swapfile_path, &path)?;
+        log::info!(
+            "Scene {} saved to {}.",
+            scene_name,
+            path.to_str().unwrap_or_default()
+        );
+
+        Ok(())
+    })
+}
+
+fn load_scene_task(
+    handle: rfd::FileHandle,
+    audio_cache: Arc<Mutex<AudioCache>>,
+) -> Task<Result<Scene>> {
+    Task::future(async move {
+        let path = handle.path();
+        log::info!("Loading scene at {}.", path.to_str().unwrap_or_default());
+        let scene_name = path.file_stem().unwrap().to_string_lossy();
+
+        let file = File::open(path)?;
+        let data: SceneData = rmp_serde::decode::from_read(file)?;
+        log::debug!("Loaded savefile data.");
+
+        let scene = {
+            let mut audio_cache = audio_cache.lock().unwrap();
+            Scene::from_data(data.with_name(&scene_name), &mut audio_cache)?
+        };
+
+        log::info!("Loaded scene {}.", scene.name());
+        Ok(scene)
+    })
 }

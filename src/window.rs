@@ -11,6 +11,7 @@ pub struct Window {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     Scene(scene::Message),
+    Saved,
     CloseRequested,
 }
 
@@ -74,6 +75,13 @@ impl Window {
                     None
                 }
             }
+            Message::Saved => {
+                if self.modified {
+                    log::debug!("Unsetting modified flag for window {}.", self.id);
+                    self.modified = false;
+                }
+                None
+            },
             Message::CloseRequested => {
                 log::info!("Close requested for window {}.", self.id);
                 if !self.modified {
@@ -88,7 +96,7 @@ impl Window {
                     .show();
 
                 match res {
-                    rfd::MessageDialogResult::Yes => todo!(),
+                    rfd::MessageDialogResult::Yes => Some(Action::Save),
                     rfd::MessageDialogResult::No => Some(Action::Close),
                     rfd::MessageDialogResult::Cancel => None,
                     _ => unreachable!(),

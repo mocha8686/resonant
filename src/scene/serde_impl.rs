@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     fs::File,
     io::{BufReader, Cursor, Read},
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 
 use anyhow::{Result, anyhow};
@@ -37,9 +37,11 @@ impl SceneData {
 }
 
 impl SceneData {
-    pub fn new(scene: &Scene, audio_cache: &AudioCache) -> Result<Self> {
+    pub fn new(scene: &Scene, audio_cache: &Mutex<AudioCache>) -> Result<Self> {
         let hashes: Vec<_> = scene.tracks.iter().map(|(_, t)| t.hash()).collect();
         let files = audio_cache
+            .lock()
+            .unwrap()
             .subset(&hashes)
             .into_values()
             .map(|data| data.load_file())
