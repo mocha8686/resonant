@@ -93,6 +93,7 @@ pub struct Soundscape {
     scale: f32,
     #[serde(skip, default = "Instant::now")]
     current: Instant,
+    #[serde(skip)]
     waypoints: VecDeque<Vector2>,
     #[serde(skip)]
     selected_track: Option<Ulid>,
