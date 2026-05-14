@@ -116,7 +116,7 @@ impl Scene {
                                     *id,
                                 ))
                             });
-                            Some(Action::Modifying(Box::new(Action::Run(Task::batch(tasks)))))
+                            Some(Action::Run(Task::batch(tasks)))
                         }
                         soundscape::Action::ChangeSelection {
                             deselected,
