@@ -39,6 +39,7 @@ pub enum Action {
     Save,
     Load,
     Modifying(Box<Action>),
+    Error(String),
 }
 
 pub struct Scene {
@@ -137,7 +138,11 @@ impl Scene {
             }
             Message::AddTrack => Some(Action::AddTrack),
             Message::TrackAdded { id, name, data } => {
-                let track = Track::new(id, name, data).expect("should be able to create track");
+                let track = match Track::new(id, name, data) {
+                    Ok(track) => track,
+                    Err(e) => return Some(Action::Error(e.to_string())),
+                };
+
                 let task = Task::done(Message::Soundscape((&track).into()));
                 self.tracks.insert(track.id(), track);
                 Some(Action::Modifying(Box::new(Action::Run(task))))

@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fs::File,
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{Arc, Mutex},
 };
 
@@ -12,7 +12,7 @@ use iced::{
     widget::text,
     window as iced_window,
 };
-use rfd::{AsyncFileDialog, FileDialog};
+use rfd::AsyncFileDialog;
 use ulid::Ulid;
 
 use crate::{
@@ -67,22 +67,7 @@ impl App {
                         window::Action::Run(task) => {
                             task.map(move |msg| Message::Window(window_id, msg))
                         }
-                        window::Action::AddTrack => {
-                            log::info!("Received request to load new track for current scene.");
-
-                            if let Some(path) = FileDialog::new()
-                                .add_filter("audio", &["flac", "mp3", "ogg", "wav", "webm"])
-                                .pick_file()
-                            {
-                                let msg = self
-                                    .add_track(window_id, &path)
-                                    .expect("should be able to add track");
-                                Task::done(msg)
-                            } else {
-                                log::info!("Track load cancelled for current scene.");
-                                Task::none()
-                            }
-                        }
+                        window::Action::AddTrack => self.add_track(window_id),
                         window::Action::Save => Task::done(Message::SaveRequested(window_id)),
                         window::Action::Load => Task::done(Message::LoadRequested),
                         window::Action::Close => {
@@ -97,6 +82,7 @@ impl App {
 
                             close.chain(exit)
                         }
+                        window::Action::Error(s) => Task::done(Message::Error(s)),
                     }
                 } else {
                     Task::none()
@@ -192,36 +178,20 @@ impl App {
         })
     }
 
-    fn add_track(&mut self, window_id: iced_window::Id, path: &Path) -> Result<Message> {
-        log::info!(
-            "Loading track at {} for current scene.",
-            path.to_str().unwrap_or_default(),
-        );
+    fn add_track(&mut self, window_id: iced_window::Id) -> Task<Message> {
+        log::info!("Received request to load new track for current scene.");
+        let audio_cache = self.audio_cache.clone();
 
-        let name = path.file_stem().map_or("Unknown filename".into(), |s| {
-            s.to_string_lossy().to_string()
-        });
-        log::debug!("Track name: {name}");
-
-        let mut file = File::open_buffered(path)?;
-
-        let data = self
-            .audio_cache
-            .clone()
-            .lock()
-            .unwrap()
-            .get_or_register(&mut file)?;
-        log::debug!("Registered track.");
-
-        let id = Ulid::new();
-        log::debug!("Track ID: {id}");
-
-        log::info!("Loaded track {id} ({name}).");
-
-        Ok(Message::Window(
-            window_id,
-            window::Message::Scene(scene::Message::TrackAdded { id, name, data }),
-        ))
+        Task::future(
+            AsyncFileDialog::new()
+                .add_filter("audio", &["flac", "mp3", "ogg", "wav", "webm"])
+                .pick_file(),
+        )
+        .and_then(move |handle| add_track_task(handle.path().to_owned(), audio_cache.clone()))
+        .map(move |res| match res {
+            Ok(msg) => Message::Window(window_id, window::Message::Scene(msg)),
+            Err(e) => Message::Error(e.to_string()),
+        })
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
@@ -236,6 +206,35 @@ impl App {
         let window_close = iced_window::close_requests().map(Message::CloseRequested);
         Subscription::batch([initialized, windows, window_close])
     }
+}
+
+fn add_track_task(path: PathBuf, audio_cache: Arc<Mutex<AudioCache>>) -> Task<Result<scene::Message>> {
+    Task::future(async move {
+        log::info!(
+            "Loading track at {} for current scene.",
+            path.to_str().unwrap_or_default(),
+        );
+
+        let name = path.file_stem().map_or("Unknown filename".into(), |s| {
+            s.to_string_lossy().to_string()
+        });
+        log::debug!("Track name: {name}");
+
+        let mut file = File::open_buffered(path)?;
+
+        let data = audio_cache
+            .clone()
+            .lock()
+            .unwrap()
+            .get_or_register(&mut file)?;
+        log::debug!("Registered track.");
+
+        let id = Ulid::new();
+        log::debug!("Track ID: {id}");
+        log::info!("Loaded track {id} ({name}).");
+
+        Ok(scene::Message::TrackAdded { id, name, data })
+    })
 }
 
 fn save_scene_task(

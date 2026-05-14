@@ -8,7 +8,6 @@ pub struct Window {
     modified: bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     Scene(scene::Message),
     Saved,
@@ -22,6 +21,7 @@ pub enum Action {
     Save,
     Load,
     Close,
+    Error(String),
 }
 
 impl Window {
@@ -70,6 +70,7 @@ impl Window {
                         scene::Action::Save => Some(Action::Save),
                         scene::Action::Load => Some(Action::Load),
                         scene::Action::Modifying(_) => unreachable!(),
+                        scene::Action::Error(s) => Some(Action::Error(s))
                     }
                 } else {
                     None
