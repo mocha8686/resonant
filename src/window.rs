@@ -10,7 +10,7 @@ pub struct Window {
 
 pub enum Message {
     Scene(scene::Message),
-    Saved,
+    Saved { new_scene_name: String },
     CloseRequested,
 }
 
@@ -70,19 +70,20 @@ impl Window {
                         scene::Action::Save => Some(Action::Save),
                         scene::Action::Load => Some(Action::Load),
                         scene::Action::Modifying(_) => unreachable!(),
-                        scene::Action::Error(s) => Some(Action::Error(s))
+                        scene::Action::Error(s) => Some(Action::Error(s)),
                     }
                 } else {
                     None
                 }
             }
-            Message::Saved => {
+            Message::Saved { new_scene_name } => {
                 if self.modified {
                     log::debug!("Unsetting modified flag for window {}.", self.id);
                     self.modified = false;
                 }
-                None
-            },
+                let msg = Message::Scene(scene::Message::NewName(new_scene_name));
+                Some(Action::Run(Task::done(msg)))
+            }
             Message::CloseRequested => {
                 log::info!("Close requested for window {}.", self.id);
                 if !self.modified {

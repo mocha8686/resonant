@@ -22,7 +22,10 @@ pub enum Message {
     Initialized,
     Window(iced_window::Id, window::Message),
     SaveRequested(iced_window::Id),
-    Saved(iced_window::Id),
+    Saved {
+        window_id: iced_window::Id,
+        new_scene_name: String,
+    },
     LoadRequested,
     Loaded(Window),
     CloseRequested(iced_window::Id),
@@ -83,9 +86,13 @@ impl App {
                 }
             }
             Message::SaveRequested(window_id) => self.save_scene(window_id),
-            Message::Saved(window_id) => {
-                Task::done(Message::Window(window_id, window::Message::Saved))
-            }
+            Message::Saved {
+                window_id,
+                new_scene_name,
+            } => Task::done(Message::Window(
+                window_id,
+                window::Message::Saved { new_scene_name },
+            )),
             Message::LoadRequested => self.load_scene(),
             Message::Loaded(window) => {
                 let window_id = window.id();
@@ -164,14 +171,13 @@ impl App {
                     .save_file(),
             )
             .and_then(move |handle| {
-                Task::future(save_scene(
-                    handle.path().to_owned(),
-                    scene_name.to_string(),
-                    scene_data.clone(),
-                ))
+                Task::future(save_scene(handle.path().to_owned(), scene_data.clone()))
             })
             .map(move |res| match res {
-                Ok(()) => Message::Saved(window_id),
+                Ok(new_scene_name) => Message::Saved {
+                    window_id,
+                    new_scene_name,
+                },
                 Err(e) => Message::Error(e.to_string()),
             })
         } else {
@@ -235,11 +241,13 @@ async fn add_track(path: PathBuf, audio_cache: Arc<Mutex<AudioCache>>) -> Result
     Ok(scene::Message::TrackAdded { id, name, data })
 }
 
-async fn save_scene(
-    mut path: PathBuf,
-    scene_name: String,
-    scene_data: Arc<SceneData>,
-) -> Result<()> {
+async fn save_scene(mut path: PathBuf, scene_data: Arc<SceneData>) -> Result<String> {
+    let scene_name = path
+        .file_stem()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
+
     log::info!(
         "Saving scene {} to {}.",
         scene_name,
@@ -268,7 +276,7 @@ async fn save_scene(
 
     log::info!("Scene {scene_name} saved to {path_str}.");
 
-    Ok(())
+    Ok(scene_name)
 }
 
 async fn load_scene(handle: rfd::FileHandle, audio_cache: Arc<Mutex<AudioCache>>) -> Result<Scene> {

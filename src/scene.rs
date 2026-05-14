@@ -29,6 +29,7 @@ pub enum Message {
     },
     Loaded,
     SaveRequested,
+    NewName(String),
     LoadRequested,
 }
 
@@ -158,6 +159,10 @@ impl Scene {
                 Some(Action::Run(Task::batch(tasks)))
             }
             Message::SaveRequested => Some(Action::Save),
+            Message::NewName(name) => {
+                self.name = name;
+                None
+            }
             Message::LoadRequested => Some(Action::Load),
         }
     }
