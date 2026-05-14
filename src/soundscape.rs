@@ -29,12 +29,12 @@ pub enum Message {
         radius: f32,
     },
     TrackRemoved(Ulid),
-    TrackSelected(Option<Ulid>),
-    TrackMoved {
+    ZoneSelected(Option<Ulid>),
+    ZoneMoved {
         id: Ulid,
         new_position: Vector2,
     },
-    TrackResized {
+    ZoneResized {
         id: Ulid,
         new_radius: f32,
     },
@@ -63,14 +63,14 @@ impl From<&Track> for Message {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-struct TrackZone {
+struct Zone {
     id: Ulid,
     name: String,
     position: Vector2,
     radius: f32,
 }
 
-impl TrackZone {
+impl Zone {
     const BORDER_WIDTH: f32 = 5.0;
 
     fn is_on_border(&self, point: Vector2) -> bool {
@@ -88,7 +88,7 @@ impl TrackZone {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Soundscape {
     listener: Listener,
-    tracks: HashMap<Ulid, TrackZone>,
+    zones: HashMap<Ulid, Zone>,
     camera: Vector2,
     scale: f32,
     #[serde(skip, default = "Instant::now")]
@@ -96,7 +96,7 @@ pub struct Soundscape {
     #[serde(skip)]
     waypoints: VecDeque<Vector2>,
     #[serde(skip)]
-    selected_track: Option<Ulid>,
+    selected_zone: Option<Ulid>,
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
@@ -112,12 +112,12 @@ impl Soundscape {
     pub fn new() -> Self {
         Self {
             listener: Listener::default(),
-            tracks: HashMap::new(),
+            zones: HashMap::new(),
             camera: Vector2::ZERO,
             scale: 1.0,
             current: Instant::now(),
             waypoints: VecDeque::new(),
-            selected_track: None,
+            selected_zone: None,
         }
     }
 
@@ -161,9 +161,9 @@ impl Soundscape {
                 position,
                 radius,
             } => {
-                self.tracks.insert(
+                self.zones.insert(
                     id,
-                    TrackZone {
+                    Zone {
                         id,
                         name,
                         position,
@@ -173,30 +173,30 @@ impl Soundscape {
                 None
             }
             Message::TrackRemoved(id) => {
-                self.tracks.remove(&id);
+                self.zones.remove(&id);
                 None
             }
-            Message::TrackMoved { id, new_position } => {
-                if let Some(track) = self.tracks.get_mut(&id) {
+            Message::ZoneMoved { id, new_position } => {
+                if let Some(track) = self.zones.get_mut(&id) {
                     log::trace!("Track zone {id} moved: {new_position}");
                     track.position = new_position;
                 }
                 Some(Action::MoveTrack(id, new_position))
             }
-            Message::TrackResized { id, new_radius } => {
-                if let Some(track) = self.tracks.get_mut(&id) {
+            Message::ZoneResized { id, new_radius } => {
+                if let Some(track) = self.zones.get_mut(&id) {
                     log::trace!("Track zone {id} resized: {new_radius}");
                     track.radius = new_radius;
                 }
                 Some(Action::ResizeTrack(id, new_radius))
             }
-            Message::TrackSelected(id) => {
-                if id == self.selected_track {
+            Message::ZoneSelected(id) => {
+                if id == self.selected_zone {
                     None
                 } else {
-                    let deselected = self.selected_track;
+                    let deselected = self.selected_zone;
                     let selected = id;
-                    self.selected_track = id;
+                    self.selected_zone = id;
 
                     Some(Action::ChangeSelection {
                         deselected,
@@ -221,11 +221,11 @@ impl Soundscape {
         self.listener.position
     }
 
-    fn selected_track(&self) -> Option<(Ulid, TrackZone)> {
-        self.selected_track.and_then(|id| {
-            self.tracks
+    fn selected_zone(&self) -> Option<(Ulid, Zone)> {
+        self.selected_zone.and_then(|id| {
+            self.zones
                 .iter()
-                .find(|(track_id, _)| **track_id == id)
+                .find(|(zone_id, _)| **zone_id == id)
                 .map(|(id, track)| (*id, track.clone()))
         })
     }

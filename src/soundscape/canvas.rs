@@ -51,8 +51,8 @@ impl Soundscape {
         (screen - screen_center) / self.scale - self.camera
     }
 
-    fn find_track_at_point(&self, point: Vector2) -> Option<&super::TrackZone> {
-        self.tracks.values().find(|t| t.contains(point))
+    fn find_track_at_point(&self, point: Vector2) -> Option<&super::Zone> {
+        self.zones.values().find(|t| t.contains(point))
     }
 }
 
@@ -97,12 +97,12 @@ impl canvas::Program<Message> for Soundscape {
         );
         frame.fill(&path, theme.palette().primary);
 
-        for track in self.tracks.values() {
+        for track in self.zones.values() {
             let path = canvas::Path::circle(track.position.into(), track.radius);
             frame.fill(
                 &path,
                 theme.extended_palette().primary.weak.color.scale_alpha(
-                    if Some(track.id) == self.selected_track {
+                    if Some(track.id) == self.selected_zone {
                         Self::TRACK_SELECTED_ALPHA
                     } else {
                         Self::TRACK_ALPHA

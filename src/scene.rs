@@ -95,7 +95,7 @@ impl Scene {
                                 id,
                             ));
                             let select_task = Task::done(Message::Soundscape(
-                                soundscape::Message::TrackSelected(Some(id)),
+                                soundscape::Message::ZoneSelected(Some(id)),
                             ));
                             Some(Action::Modifying(Box::new(Action::Run(
                                 move_task.chain(select_task),

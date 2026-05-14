@@ -36,7 +36,7 @@ impl Soundscape {
                                 self.screen_to_world(*cursor_pos, bounds.center().into()),
                             )
                             .map(|t| t.id);
-                        Some(canvas::Action::publish(Message::TrackSelected(id)))
+                        Some(canvas::Action::publish(Message::ZoneSelected(id)))
                     }
                     _ => None,
                 };
@@ -115,7 +115,7 @@ impl Soundscape {
         let world_cursor_start = self.screen_to_world(cursor_start, bounds.center().into());
         let world_cursor_current = self.screen_to_world(cursor_current, bounds.center().into());
 
-        if let Some((id, track)) = self.selected_track()
+        if let Some((id, track)) = self.selected_zone()
             && track.is_on_border(world_cursor_start)
         {
             *state = State::ResizingTrack {
@@ -151,7 +151,7 @@ impl Soundscape {
         cursor_pos: Vector2,
     ) -> mouse::Interaction {
         let position = self.screen_to_world(cursor_pos, bounds.center().into());
-        if let Some((_, track)) = self.selected_track()
+        if let Some((_, track)) = self.selected_zone()
             && track.is_on_border(position)
         {
             let mut delta = position - track.position;

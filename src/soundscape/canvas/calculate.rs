@@ -51,7 +51,7 @@ impl Soundscape {
         original_position: Vector2,
     ) -> canvas::Action<Message> {
         let new_position = original_position + cursor_delta;
-        canvas::Action::publish(Message::TrackMoved { id, new_position }).and_capture()
+        canvas::Action::publish(Message::ZoneMoved { id, new_position }).and_capture()
     }
 
     pub(super) fn calculate_track_resize(
@@ -61,6 +61,6 @@ impl Soundscape {
     ) -> canvas::Action<Message> {
         let delta = cursor_pos - track_position;
         let new_radius = delta.magnitude();
-        canvas::Action::publish(Message::TrackResized { id, new_radius }).and_capture()
+        canvas::Action::publish(Message::ZoneResized { id, new_radius }).and_capture()
     }
 }
